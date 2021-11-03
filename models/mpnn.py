@@ -1,175 +1,94 @@
-# %%
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import Tensor, nn
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import degree
 
 
-# %%
-class MPNN(nn.Module):
-    def __init__(self,
-                 n_obs_in=7,
-                 n_layers=3,
-                 n_features=64,
-                 tied_weights=False,
-                 n_hid_readout=[], ):
-
-        super().__init__()
-
-        self.n_obs_in = n_obs_in
-        self.n_layers = n_layers
-        self.n_features = n_features
-        self.tied_weights = tied_weights
-
-        self.node_init_embedding_layer = nn.Sequential(
-            nn.Linear(n_obs_in, n_features, bias=False),
+class ConnectionsEmbedding(MessagePassing):
+    def __init__(self, in_channels, n_features):
+        super(ConnectionsEmbedding, self).__init__(aggr='mean')
+        self.layer2 = nn.Sequential(
+            nn.Linear(in_channels + 1, n_features - 1, bias=False),
+            nn.ReLU()
+        )
+        self.layer3 = nn.Sequential(
+            nn.Linear(n_features, n_features, bias=False),
             nn.ReLU()
         )
 
-        self.edge_embedding_layer = EdgeAndNodeEmbeddingLayer(n_obs_in, n_features)
+    def message(self, x_j, edge_attr):
+        # print(x_j.shape, edge_attr.shape)
+        return self.layer2(torch.cat([edge_attr, x_j], dim=1))
 
-        if self.tied_weights:
-            self.update_node_embedding_layer = UpdateNodeEmbeddingLayer(n_features)
-        else:
-            self.update_node_embedding_layer = nn.ModuleList(
-                [UpdateNodeEmbeddingLayer(n_features) for _ in range(self.n_layers)])
+    def update(self, aggr_out: Tensor, edge_index: Tensor) -> Tensor:
+        # Concatenate node degree to node features.
+        # x: [N, in_channels]
+        # edge_index: [2, E]
+        print(aggr_out.shape, edge_index.shape)
+        row, col = edge_index
+        deg = degree(col, aggr_out.size(0), dtype=aggr_out.dtype)
+        return self.layer3(torch.concat([aggr_out, deg.unsqueeze(-1)], dim=1))
 
-        self.readout_layer = ReadoutLayer(n_features, n_hid_readout)
+    def forward(self, x, edge_index, edge_attr):
+        # x: [N, in_channels]
+        # edge_index: [2, E]
+        # edge_attr: [E, 1]
+        return self.propagate(edge_index, x=x, edge_attr=edge_attr)
 
-    @torch.no_grad()
-    def get_normalisation(self, adj):
-        norm = torch.sum((adj != 0), dim=1).unsqueeze(-1)
-        norm[norm == 0] = 1
-        return norm.float()
+class Mpnn(MessagePassing):
+    def __init__(self, in_channels, n_features, K):
+        super().__init__(aggr='add')
+        self.K = K
+        self.node_init_embedding_layer = nn.Sequential(
+            nn.Linear(in_channels, n_features, bias=False),
+            nn.ReLU()
+        )
+        self.theta4layers = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(2 * n_features, n_features, bias=False),
+                nn.ReLU()
+            )
+            for _ in range(K)
+        ]
+        )
+        self.theta5layers = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(2 * n_features, n_features, bias=False),
+                nn.ReLU()
+            )
+            for _ in range(K)
+        ]
+        )
+        self.theta6 = nn.Sequential(
+            nn.Linear(n_features, n_features, bias=False),
+            nn.ReLU()
+        )
+        self.theta7 = nn.Linear(2 * n_features, n_features, bias=False)
+        self.connection_embedding_layer = ConnectionsEmbedding(in_channels=in_channels, n_features=n_features)
 
-    def forward(self, obs: torch.tensor):
-        # from this code it seems that dim should be 3, the first dimension should represent the training examples,
-        # the second will represent the nodes, the third will represent the features of the nodes
-        if obs.dim() == 2:
-            obs = obs.unsqueeze(0)
-        # in-place version of transpose() This is transposing the adjacency matrix contained in the obs Tensor
-        obs.transpose_(-1, -2)
+    def forward(self, x, edge_index, edge_attr, batch=None):
+        connections_embedding = self.connection_embedding_layer(x, edge_index, edge_attr)
+        x = self.node_init_embedding_layer(x)
+        row, col = edge_index
+        deg = degree(col, x.size(0), dtype=x.dtype)
+        norm = deg.pow(-0.5)
+        norm[norm == float('inf')] = 0
+        for k in range(self.K):
+            x = self.propagate(edge_index, x=x, edge_attr=edge_attr, connections_embedding=connections_embedding,
+                               norm=norm, k=k)
+        avg_x = x.mean(dim=0)
+        avg_x_theta6 = self.theta6(avg_x.unsqueeze(0)).expand(x.shape[0], -1)
+        concat = torch.cat([avg_x_theta6, x], dim=1)
+        return self.theta7(concat)
 
-        # Calculate features to be used in the MPNN
-        node_features = obs[:, :, 0:self.n_obs_in]
+    def message(self, x_j, edge_attr):
+        # x_j: [E, n_features]
+        # edge_attr: [E, 1]
+        return edge_attr * x_j
 
-        # Get graph adj matrix.
-        # since the edge features and node features are one and the same (ie adjacency matrix) that's why I have commented out the below line
-        # adj = obs[:, :, self.n_obs_in:]
-        adj = obs[:, :, 0:self.n_obs_in]
-        # adj_conns = (adj != 0).type(torch.FloatTensor).to(adj.device)
-
-        norm = self.get_normalisation(adj)
-
-        init_node_embeddings = self.node_init_embedding_layer(node_features)
-        edge_embeddings = self.edge_embedding_layer(node_features, adj, norm)
-
-        # Initialise embeddings.
-        current_node_embeddings = init_node_embeddings
-
-        if self.tied_weights:
-            for _ in range(self.n_layers):
-                current_node_embeddings = self.update_node_embedding_layer(current_node_embeddings,
-                                                                           edge_embeddings,
-                                                                           norm,
-                                                                           adj)
-        else:
-            for i in range(self.n_layers):
-                current_node_embeddings = self.update_node_embedding_layer[i](current_node_embeddings,
-                                                                              edge_embeddings,
-                                                                              norm,
-                                                                              adj)
-
-        out = self.readout_layer(current_node_embeddings)
-        out = out.squeeze()
-
-        return out
-
-
-class EdgeAndNodeEmbeddingLayer(nn.Module):
-
-    def __init__(self, n_obs_in, n_features):
-        super().__init__()
-        self.n_obs_in = n_obs_in
-        self.n_features = n_features
-
-        self.edge_embedding_NN = nn.Linear(int(n_obs_in + 1), n_features - 1, bias=False)
-        self.edge_feature_NN = nn.Linear(n_features, n_features, bias=False)
-
-    def forward(self, node_features, adj, norm):
-        edge_features = torch.cat([adj.unsqueeze(-1),
-                                   node_features.unsqueeze(-2).transpose(-2, -3).repeat(1, adj.shape[-2], 1, 1)],
-                                  dim=-1)
-
-        edge_features *= (adj.unsqueeze(-1) != 0).float()
-
-        edge_features_unrolled = torch.reshape(edge_features, (
-        edge_features.shape[0], edge_features.shape[1] * edge_features.shape[1], edge_features.shape[-1]))
-        embedded_edges_unrolled = F.relu(self.edge_embedding_NN(edge_features_unrolled))
-        embedded_edges_rolled = torch.reshape(embedded_edges_unrolled,
-                                              (adj.shape[0], adj.shape[1], adj.shape[1], self.n_features - 1))
-        embedded_edges = embedded_edges_rolled.sum(dim=2) / norm
-
-        edge_embeddings = F.relu(self.edge_feature_NN(torch.cat([embedded_edges, norm / norm.max()], dim=-1)))
-
-        return edge_embeddings
-
-
-class UpdateNodeEmbeddingLayer(nn.Module):
-
-    def __init__(self, n_features):
-        super().__init__()
-
-        self.message_layer = nn.Linear(2 * n_features, n_features, bias=False)
-        self.update_layer = nn.Linear(2 * n_features, n_features, bias=False)
-
-    def forward(self, current_node_embeddings, edge_embeddings, norm, adj):
-        node_embeddings_aggregated = torch.matmul(adj, current_node_embeddings) / norm
-
-        message = F.relu(self.message_layer(torch.cat([node_embeddings_aggregated, edge_embeddings], dim=-1)))
-        new_node_embeddings = F.relu(self.update_layer(torch.cat([current_node_embeddings, message], dim=-1)))
-
-        return new_node_embeddings
-
-
-class ReadoutLayer(nn.Module):
-
-    def __init__(self, n_features, n_hid=[], bias_pool=False, bias_readout=True):
-
-        super().__init__()
-
-        self.layer_pooled = nn.Linear(int(n_features), int(n_features), bias=bias_pool)
-
-        if type(n_hid) != list:
-            n_hid = [n_hid]
-
-        n_hid = [2 * n_features] + n_hid + [1]
-
-        self.layers_readout = []
-        for n_in, n_out in list(zip(n_hid, n_hid[1:])):
-            layer = nn.Linear(n_in, n_out, bias=bias_readout)
-            self.layers_readout.append(layer)
-
-        self.layers_readout = nn.ModuleList(self.layers_readout)
-
-    def forward(self, node_embeddings):
-
-        f_local = node_embeddings
-
-        h_pooled = self.layer_pooled(node_embeddings.sum(dim=1) / node_embeddings.shape[1])
-        f_pooled = h_pooled.repeat(1, 1, node_embeddings.shape[1]).view(node_embeddings.shape)
-
-        features = F.relu(torch.cat([f_pooled, f_local], dim=-1))
-
-        for i, layer in enumerate(self.layers_readout):
-            features = layer(features)
-            if i < len(self.layers_readout) - 1:
-                features = F.relu(features)
-            else:
-                out = features
-
-        return out
-
-
-# %%
-if __name__ == "__main__":
-    pass
+    def update(self, aggr_out, norm, connections_embedding, x, k):
+        out1 = aggr_out * norm.view(-1, 1)
+        out2 = torch.concat([out1, connections_embedding], dim=1)
+        out3 = self.theta4layers[k](out2)
+        out4 = self.theta5layers[k](torch.concat([x, out3], dim=1))
+        return out4
