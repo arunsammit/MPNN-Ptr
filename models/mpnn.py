@@ -24,7 +24,7 @@ class ConnectionsEmbedding(MessagePassing):
         # Concatenate node degree to node features.
         # x: [N, in_channels]
         # edge_index: [2, E]
-        print(aggr_out.shape, edge_index.shape)
+        # print(aggr_out.shape, edge_index.shape)
         row, col = edge_index
         deg = degree(col, aggr_out.size(0), dtype=aggr_out.dtype)
         return self.layer3(torch.concat([aggr_out, deg.unsqueeze(-1)], dim=1))
@@ -35,8 +35,11 @@ class ConnectionsEmbedding(MessagePassing):
         # edge_attr: [E, 1]
         return self.propagate(edge_index, x=x, edge_attr=edge_attr)
 
+
 class Mpnn(MessagePassing):
     def __init__(self, in_channels, n_features, K):
+        # in_channels: dimension of input node features.
+        # n_features: dimension of the output embeddings
         super().__init__(aggr='add')
         self.K = K
         self.node_init_embedding_layer = nn.Sequential(

@@ -22,7 +22,7 @@ def generate_data_loader(min_graph_size=10, max_graph_size=50) -> List[Data]:
         x = torch.from_numpy(nx.to_numpy_array(G)).float()
         x_padded = torch.cat([x, torch.zeros(x.shape[0], max_graph_size - x.shape[1])], dim=1)
         edge_attr = torch.from_numpy(lognormal).float().unsqueeze(-1)
-        print(edge_attr.shape)
+        # print(edge_attr.shape)
         data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
         datalist.append(data)
     return datalist
