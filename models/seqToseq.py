@@ -1,6 +1,7 @@
 from torch import Tensor, nn
 import torch
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, PackedSequence
+import torch.nn.functional as F
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_layers,
@@ -83,21 +84,47 @@ class PointerNet(nn.Module):
 
     def forward(self, input:Tensor, mask):
         # input shape: (seq_len, batch, input_dim)
+        # mask shape: (batch, seq_len)
         batch_size = input.size(1)
         # seq_len is the length of the longest sequence in the batch
         seq_len = input.size(0)
-        # check the dimension of output
-        outputs = torch.zeros(seq_len, batch_size, seq_len)
-        lengths = mask.sum(dim=1)
+        # Tensor to store the predicted mapping
+        # predicted_mappings shape: (batch, seq_len)
+        predicted_mappings = torch.zeros(batch_size, seq_len)
+        # Tensor to store the log likelihoods of the predicted mappings
+        # log_likelihoods shape: (batch,)
+        log_likelihoods = torch.zeros(batch_size)
+        mask_decoding = mask.clone()
+        # check if mask_decoding should be detached from the computation graph
+        lengths = mask_decoding.sum(dim=1)
         packed_embeddings = torch.nn.utils.rnn.pack_padded_sequence(input, lengths.to('cpu'),
                                                                     enforce_sorted=False)
         encoder_outputs, (hidden, cell) = self.encoder(packed_embeddings)
 
         # first input should be a part of model learnable parameters
         decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
+        log_probs_list = []
         for t in range(1, seq_len):
             output, (hidden, cell) = self.decoder(decoder_input, hidden, cell)
-            outputs[t] = self.attn(output, encoder_outputs, mask)
-            pointed_inputs = input.data[outputs[t].argmax(dim=1), torch.arange(batch_size)]
-            # pointed_inputs shape: (batch, input_dim)
-            decoder_input = pointed_inputs
+            logits = self.attn(output, encoder_outputs, mask_decoding)
+            # logits shape: (batch, seq_len)
+            # select the indices with the highest attention weight
+            selected_indices = logits.argmax(dim=1)
+            # selected_indices shape: (batch_size,)
+            predicted_mappings[:, t] = selected_indices
+            log_probs = F.log_softmax(logits, dim=1)
+            log_probs_list.append(log_probs)
+            # decoder_input shape: (batch, input_dim)
+            decoder_input = input[selected_indices, torch.arange(batch_size)]
+            # update the mask_decoding to remove the pointed inputs
+            mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
+        # calculate the log likelihoods
+        log_probs = torch.stack(log_probs_list, dim=1)
+        log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
+        # ignoring the probabilities of the padded values
+        log_likelihoods = log_likelihoods.masked_fill(mask == 0, 0)
+        # assign -1 to the mappings corresponding to the padded values to denote that it is invalid
+        predicted_mappings = predicted_mappings.masked_fill(mask == 0, -1)
+        log_likelihoods_sum = log_likelihoods.sum(dim=1)
+        return predicted_mappings, log_likelihoods_sum
+
