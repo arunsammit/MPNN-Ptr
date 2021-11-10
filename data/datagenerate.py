@@ -10,7 +10,9 @@ from typing import Tuple, List
 import torch
 
 
-def generate_data_loader(min_graph_size=10, max_graph_size=50) -> List[Data]:
+def generate_graph_data_list(min_graph_size=10, max_graph_size=50) -> List[Data]:
+    if max_graph_size < min_graph_size:
+        raise ValueError("max_graph_size must be greater than min_graph_size")
     rng = default_rng()
     datalist = []
     graph_sizes = random.choices(range(min_graph_size, max_graph_size, 1), k=100)

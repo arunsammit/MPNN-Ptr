@@ -141,3 +141,5 @@ cython_debug/
 
 .idea/
 /notebooks/.ipynb_checkpoints/
+
+**/__pycache__/

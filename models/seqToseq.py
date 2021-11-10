@@ -102,7 +102,7 @@ class PointerNet(nn.Module):
         batch_size = input.size(1)
         # Tensor to store the predicted mapping
         # predicted_mappings shape: (batch, seq_len)
-        predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.long)
+        predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.int64)
         encoder_outputs, (hidden, cell) = self.encoder(input, mask)
         # first input should be a part of model learnable parameters
         decoder_input = self.initial_decoder_input.repeat(batch_size, 1)

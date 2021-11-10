@@ -2,6 +2,7 @@ import torch
 from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree
+from torch_geometric.loader import DataLoader
 
 
 class ConnectionsEmbedding(MessagePassing):
@@ -22,7 +23,7 @@ class ConnectionsEmbedding(MessagePassing):
 
     def update(self, aggr_out: Tensor, edge_index: Tensor) -> Tensor:
         # Concatenate node degree to node features.
-        # x: [N, in_channels]
+        # x: [N, input_node_dim]
         # edge_index: [2, E]
         # print(aggr_out.shape, edge_index.shape)
         row, col = edge_index
@@ -30,20 +31,20 @@ class ConnectionsEmbedding(MessagePassing):
         return self.layer3(torch.concat([aggr_out, deg.unsqueeze(-1)], dim=1))
 
     def forward(self, x, edge_index, edge_attr):
-        # x: [N, in_channels]
+        # x: [N, input_node_dim]
         # edge_index: [2, E]
         # edge_attr: [E, 1]
         return self.propagate(edge_index, x=x, edge_attr=edge_attr)
 
 
 class Mpnn(MessagePassing):
-    def __init__(self, in_channels, n_features, K):
-        # in_channels: dimension of input node features.
+    def __init__(self, input_node_dim, n_features, K):
+        # input_node_dim: dimension of input node features.
         # n_features: dimension of the output embeddings
         super().__init__(aggr='add')
         self.K = K
         self.node_init_embedding_layer = nn.Sequential(
-            nn.Linear(in_channels, n_features, bias=False),
+            nn.Linear(input_node_dim, n_features, bias=False),
             nn.ReLU()
         )
         self.theta4layers = nn.ModuleList([
@@ -67,9 +68,9 @@ class Mpnn(MessagePassing):
             nn.ReLU()
         )
         self.theta7 = nn.Linear(2 * n_features, n_features, bias=False)
-        self.connection_embedding_layer = ConnectionsEmbedding(in_channels=in_channels, n_features=n_features)
+        self.connection_embedding_layer = ConnectionsEmbedding(in_channels=input_node_dim, n_features=n_features)
 
-    def forward(self, x, edge_index, edge_attr, batch=None):
+    def forward(self, x, edge_index, edge_attr):
         connections_embedding = self.connection_embedding_layer(x, edge_index, edge_attr)
         x = self.node_init_embedding_layer(x)
         row, col = edge_index
@@ -95,3 +96,15 @@ class Mpnn(MessagePassing):
         out3 = self.theta4layers[k](out2)
         out4 = self.theta5layers[k](torch.concat([x, out3], dim=1))
         return out4
+
+
+if __name__ == '__main__':
+    from data.datagenerate import generate_graph_data_list
+
+    min_graph_size = 5
+    max_graph_size = 10
+    data = generate_graph_data_list(min_graph_size=min_graph_size, max_graph_size=max_graph_size)[0]
+    print(data.x.shape, data.edge_index.shape, data.edge_attr.shape)
+    mpnn = Mpnn(input_node_dim=max_graph_size, n_features=12, K=2)
+    embeddings = mpnn(data.x, data.edge_index, data.edge_attr)
+    print(embeddings)
