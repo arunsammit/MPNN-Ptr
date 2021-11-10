@@ -3,6 +3,7 @@ import torch
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, PackedSequence
 import torch.nn.functional as F
 
+
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_layers,
                  p):
@@ -13,15 +14,21 @@ class Encoder(nn.Module):
         self.rnn = nn.LSTM(input_dim, hidden_dim, n_layers,
                            dropout=p)
 
-    def forward(self, input:PackedSequence):
+    def forward(self, input, mask):
         # input shape: (seq_len, batch, input_dim)
-        # input_lengths shape: (batch)
-        # output shape: (seq_len, batch, hidden_dim)
-        packed_outputs, (hidden, cell) = self.rnn(input)
+        # mask shape: (batch, seq_len)
+        lengths = mask.sum(dim=1)
+        # lengths shape: (batch)
+        packed_inputs = torch.nn.utils.rnn.pack_padded_sequence(input, lengths.to('cpu'),
+                                                                enforce_sorted=False)
+        packed_outputs, (hidden, cell) = self.rnn(packed_inputs)
         output, _ = pad_packed_sequence(packed_outputs)
+        # output shape: (seq_len, batch, hidden_dim)
         # hidden shape: (n_layers, batch, hidden_dim) cell shape: (n_layers, batch, hidden_dim)
         # if encoder is bidirectional
         # pass hidden and cell through a linear layer to match decoder hidden and cell dimension
+        seq_len = input.shape[0]
+        # reshape output to (seq_len, batch, hidden_dim)
         return output, (hidden, cell)
 
 
@@ -39,6 +46,7 @@ class Attention(nn.Module):
         # encoder_outputs is a list of all the encoder outputs
         # decoder_output shape: (batch, dec_dim)
         # encoder_outputs shape: (seq_len, batch, enc_dim)
+
         seq_len = encoder_outputs.shape[0]
         batch_size = encoder_outputs.shape[1]
         decoder_output = decoder_output.unsqueeze(1).repeat(1, seq_len, 1)
@@ -77,34 +85,31 @@ class Decoder(nn.Module):
 class PointerNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_layers, p):
         super().__init__()
-        self.encoder:Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
-        self.decoder:Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
-        self.attn:Attention = Attention(hidden_dim, hidden_dim)
+        self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
+        self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
+        self.attn: Attention = Attention(hidden_dim, hidden_dim)
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
 
-    def forward(self, input:Tensor, mask):
+    def forward(self, input: Tensor, mask):
         # input shape: (seq_len, batch, input_dim)
         # mask shape: (batch, seq_len)
-        batch_size = input.size(1)
+        lengths = mask.sum(dim=1,dtype=torch.long)
         # seq_len is the length of the longest sequence in the batch
-        seq_len = input.size(0)
+        seq_len = torch.max(lengths).item()
+        # reshape input and mask to remove extra padding
+        input = input[:seq_len]
+        mask = mask[:,:seq_len]
+        batch_size = input.size(1)
         # Tensor to store the predicted mapping
         # predicted_mappings shape: (batch, seq_len)
-        predicted_mappings = torch.zeros(batch_size, seq_len)
-        # Tensor to store the log likelihoods of the predicted mappings
-        # log_likelihoods shape: (batch,)
-        log_likelihoods = torch.zeros(batch_size)
-        mask_decoding = mask.clone()
-        # check if mask_decoding should be detached from the computation graph
-        lengths = mask_decoding.sum(dim=1)
-        packed_embeddings = torch.nn.utils.rnn.pack_padded_sequence(input, lengths.to('cpu'),
-                                                                    enforce_sorted=False)
-        encoder_outputs, (hidden, cell) = self.encoder(packed_embeddings)
-
+        predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.long)
+        encoder_outputs, (hidden, cell) = self.encoder(input, mask)
         # first input should be a part of model learnable parameters
         decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
+        # mask to be used while calculating attention weights
+        mask_decoding = mask.clone()
         log_probs_list = []
-        for t in range(1, seq_len):
+        for t in range(seq_len):
             output, (hidden, cell) = self.decoder(decoder_input, hidden, cell)
             logits = self.attn(output, encoder_outputs, mask_decoding)
             # logits shape: (batch, seq_len)
@@ -113,6 +118,7 @@ class PointerNet(nn.Module):
             # selected_indices shape: (batch_size,)
             predicted_mappings[:, t] = selected_indices
             log_probs = F.log_softmax(logits, dim=1)
+            # log_probs shape: (batch, seq_len)
             log_probs_list.append(log_probs)
             # decoder_input shape: (batch, input_dim)
             decoder_input = input[selected_indices, torch.arange(batch_size)]
@@ -120,11 +126,30 @@ class PointerNet(nn.Module):
             mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
         # calculate the log likelihoods
         log_probs = torch.stack(log_probs_list, dim=1)
+        # log_probs shape: (batch, seq_len, seq_len)
         log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
+        # log_likelihoods shape: (batch, seq_len)
         # ignoring the probabilities of the padded values
         log_likelihoods = log_likelihoods.masked_fill(mask == 0, 0)
+        # log_likelihoods shape: (batch,)
         # assign -1 to the mappings corresponding to the padded values to denote that it is invalid
         predicted_mappings = predicted_mappings.masked_fill(mask == 0, -1)
         log_likelihoods_sum = log_likelihoods.sum(dim=1)
         return predicted_mappings, log_likelihoods_sum
 
+
+if __name__ == '__main__':
+    # test the model
+    input_dim = 5
+    hidden_dim = 8
+    n_layers = 2
+    p = 0.1
+    batch_size = 4
+    max_seq_len = 10
+    model = PointerNet(input_dim, hidden_dim, n_layers, p)
+    input = torch.randn(max_seq_len, batch_size, input_dim)
+    mask = torch.tril(torch.ones(batch_size, max_seq_len))
+    mask[-1,:] = 1
+    predicted_mappings, log_likelihoods_sum = model(input, mask)
+    print(predicted_mappings)
+    print(log_likelihoods_sum)
