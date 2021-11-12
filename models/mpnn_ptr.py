@@ -26,14 +26,14 @@ class MpnnPtr(nn.Module):
 
 
 if __name__ == '__main__':
-    from data.datagenerate import generate_graph_data_list
+    from utils.datagenerate import generate_graph_data_list
     from torch_geometric.loader import DataLoader
 
     min_graph_size = 5
     max_graph_size = 10
     mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=12, hidden_dim=12, K=2, n_layers=2, p_dropout=0.1)
     graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
-    data_loader = DataLoader(graph_data_list, batch_size=4, shuffle=True)
+    data_loader = DataLoader(graph_data_list, batch_size=4)
     for data in data_loader:
         predicted_mappings, log_likelihoods_sum = mpnn_ptr(data)
         print(predicted_mappings)

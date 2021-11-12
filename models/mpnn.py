@@ -99,7 +99,7 @@ class Mpnn(MessagePassing):
 
 
 if __name__ == '__main__':
-    from data.datagenerate import generate_graph_data_list
+    from utils.datagenerate import generate_graph_data_list
 
     min_graph_size = 5
     max_graph_size = 10
@@ -108,3 +108,5 @@ if __name__ == '__main__':
     mpnn = Mpnn(input_node_dim=max_graph_size, n_features=12, K=2)
     embeddings = mpnn(data.x, data.edge_index, data.edge_attr)
     print(embeddings)
+
+# a,b  a <- b

@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch import Tensor
 from models.mpnn import Mpnn, ConnectionsEmbedding
-from data.datagenerate import generate_graph_data_list
+from utils.datagenerate import generate_graph_data_list
 from torch_geometric.loader import DataLoader
 import torch_geometric
 # %%
