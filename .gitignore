@@ -137,9 +137,8 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-.vscode/
-
-.idea/
 /notebooks/.ipynb_checkpoints/
 
 **/__pycache__/
+discarded/
+

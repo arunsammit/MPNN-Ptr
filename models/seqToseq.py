@@ -81,25 +81,47 @@ class Decoder(nn.Module):
         output = output.squeeze(0)
         return output, (hidden, cell)
 
+class Greedy(nn.Module):
+    def __init__(self):
+        super(Greedy, self).__init__()
+    def forward(self, log_p):
+        return torch.argmax(log_p, 1).long()
+
+class Categorical(nn.Module):
+    def __init__(self):
+        super(Categorical, self).__init__()
+    def forward(self, log_p, num_samples):
+        samples = torch.multinomial(log_p.exp(), num_samples).long()
+        if num_samples == 1:
+            return samples.squeeze(1)
+        else:
+            return samples
 
 class PointerNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_layers, p):
+    def __init__(self, input_dim, hidden_dim, n_layers, p, mapping_selection_method='sampling'):
         super().__init__()
         self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
         self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
         self.attn: Attention = Attention(hidden_dim, hidden_dim)
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
+        self.mapping_selection_method = {'greedy':Greedy(),'sampling':Categorical()}[mapping_selection_method]
 
-    def forward(self, input: Tensor, mask):
-        # input shape: (seq_len, batch, input_dim)
-        # mask shape: (batch, seq_len)
-        lengths = mask.sum(dim=1,dtype=torch.long)
+    def preprocess(self, input, mask):
+        lengths = mask.sum(dim=1, dtype=torch.long)
         # seq_len is the length of the longest sequence in the batch
         seq_len = torch.max(lengths).item()
         # reshape input and mask to remove extra padding
         input = input[:seq_len]
-        mask = mask[:,:seq_len]
+        mask = mask[:, :seq_len]
         batch_size = input.size(1)
+        return input, mask
+
+    def forward(self, input: Tensor, mask):
+        # input shape: (seq_len, batch, input_dim)
+        # mask shape: (batch, seq_len)
+        input, mask= self.preprocess(input, mask)
+        batch_size = input.size(1)
+        seq_len = input.size(0)
         # Tensor to store the predicted mapping
         # predicted_mappings shape: (batch, seq_len)
         predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.int64)
@@ -113,12 +135,11 @@ class PointerNet(nn.Module):
             output, (hidden, cell) = self.decoder(decoder_input, hidden, cell)
             logits = self.attn(output, encoder_outputs, mask_decoding)
             # logits shape: (batch, seq_len)
-            # select the indices with the highest attention weight
-            selected_indices = logits.argmax(dim=1)
-            # selected_indices shape: (batch_size,)
-            predicted_mappings[:, t] = selected_indices
             log_probs = F.log_softmax(logits, dim=1)
             # log_probs shape: (batch, seq_len)
+            selected_indices = self.mapping_selection_method(log_probs, 1)
+            # selected_indices shape: (batch_size,)
+            predicted_mappings[:, t] = selected_indices
             log_probs_list.append(log_probs)
             # decoder_input shape: (batch, input_dim)
             decoder_input = input[selected_indices, torch.arange(batch_size)]
@@ -137,6 +158,46 @@ class PointerNet(nn.Module):
         log_likelihoods_sum = log_likelihoods.sum(dim=1)
         return predicted_mappings, log_likelihoods_sum
 
+    def sample_multiple_mappings(self, input: Tensor, mask, n_samples):
+        # sample n_samples mapping solutions for each sequence in the batch
+        input, mask= self.preprocess(input, mask)
+        batch_size = input.size(1)
+        seq_len = input.size(0)
+        predicted_mappings = torch.zeros(batch_size*n_samples, seq_len, dtype=torch.int64)
+        encoder_outputs, (hidden, cell) = self.encoder(input, mask)
+        decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
+        mask_decoding = mask.clone()
+        for t in range(seq_len):
+            output, (hidden, cell) = self.decoder(decoder_input, hidden, cell)
+            if t == 0:
+                logits = self.attn(output, encoder_outputs, mask_decoding)
+                log_probs = F.log_softmax(logits, dim=1)
+                # selected_indices shape: (batch, n_samples)
+                selected_indices = self.mapping_selection_method(log_probs, n_samples)
+                predicted_mappings[:, t] = selected_indices.view(-1)
+                mask_decoding = mask_decoding.repeat_interleave(n_samples, dim=0).clone()
+                mask_decoding.scatter_(1, selected_indices.view(-1).unsqueeze(1), 0)
+                hidden = hidden.repeat_interleave(n_samples, dim=1)
+                cell = cell.repeat_interleave(n_samples, dim=1)
+            else:
+                logits = self.attn(output, encoder_outputs.repeat_interleave(n_samples,dim=1), mask_decoding)
+                log_probs = F.log_softmax(logits, dim=1)
+                selected_indices = self.mapping_selection_method(log_probs, 1)
+                predicted_mappings[:, t] = selected_indices
+                mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
+            decoder_input = input.repeat_interleave(n_samples,dim=1)[selected_indices.view(-1),
+                                                                     torch.arange(batch_size*n_samples)]
+        predicted_mappings = predicted_mappings.masked_fill(mask.repeat_interleave(n_samples,dim=0) == 0, -1)
+        # reshape the predicted_mappings to (batch_size, seq_len, n_samples)
+        predicted_mappings = predicted_mappings.view(batch_size, n_samples, seq_len)
+
+        return predicted_mappings
+
+
+
+
+
+
 
 if __name__ == '__main__':
     # test the model
@@ -151,5 +212,7 @@ if __name__ == '__main__':
     mask = torch.tril(torch.ones(batch_size, max_seq_len))
     mask[-1,:] = 1
     predicted_mappings, log_likelihoods_sum = model(input, mask)
+    samples = model.sample_multiple_mappings(input, mask, n_samples=2)
+    print(samples)
     print(predicted_mappings)
     print(log_likelihoods_sum)

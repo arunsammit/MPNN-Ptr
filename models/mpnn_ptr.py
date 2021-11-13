@@ -4,7 +4,6 @@ from seqToseq import PointerNet
 import torch
 import torch_geometric
 
-
 # combine Mpnn and PointeNet
 class MpnnPtr(nn.Module):
     def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout):
@@ -27,14 +26,17 @@ class MpnnPtr(nn.Module):
 
 if __name__ == '__main__':
     from utils.datagenerate import generate_graph_data_list
+    from utils.datagenerate import generate_graph_data_loader_with_distance_matrix
     from torch_geometric.loader import DataLoader
 
-    min_graph_size = 5
-    max_graph_size = 10
-    mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=12, hidden_dim=12, K=2, n_layers=2, p_dropout=0.1)
-    graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
-    data_loader = DataLoader(graph_data_list, batch_size=4)
-    for data in data_loader:
+    # min_graph_size = 5
+    # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
+    # data_loader = DataLoader(graph_data_list, batch_size=4)
+    # use generate_graph_data_loader_with_distance_matrix
+    dataloader, distance_matrices  = generate_graph_data_loader_with_distance_matrix(10)
+    max_graph_size = 36
+    mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=50, hidden_dim=50, K=2, n_layers=2, p_dropout=0.1)
+    for data, distance_matrix in zip(dataloader, distance_matrices):
         predicted_mappings, log_likelihoods_sum = mpnn_ptr(data)
         print(predicted_mappings)
         print(log_likelihoods_sum)

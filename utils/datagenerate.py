@@ -9,7 +9,7 @@ from torch_geometric.loader import DataLoader
 from typing import Tuple, List
 import torch
 def generate_graph_data_loader_with_distance_matrix(batch_size):
-    sizes_list = [9, 12, 16, 20, 25, 30, 36]
+    sizes_list = np.array([9, 12, 16, 20, 25, 30, 36])
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
     m = np.ceil(sizes_list/ n).astype(int)
     datalist = []
