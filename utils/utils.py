@@ -28,4 +28,4 @@ if __name__ == '__main__':
     for data, distance_matrix in zip(dataloader,distance_matrices):
 
         predicted_mappings = torch.arange(data.num_nodes/data.num_graphs).expand(data.num_graphs, int(data.num_nodes/data.num_graphs)).long()
-        print(communication_cost(data.edge_index, data.edge_attr, data.batch, torch.tensor(distance_matrix), predicted_mappings))
+        print(communication_cost(data.edge_index, data.edge_attr, torch.tensor(distance_matrix), predicted_mappings))
