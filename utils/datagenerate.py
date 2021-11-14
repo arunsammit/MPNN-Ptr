@@ -23,7 +23,7 @@ def generate_graph_data_loader_with_distance_matrix(batch_size):
         for i, d in gen:
             for j, val in d.items():
                 D[i, j] = val
-        distance_matrices.append(D)
+        distance_matrices.append(torch.from_numpy(D))
     max_size = max(sizes_list)
     for size in sizes_list:
         for j in range(batch_size):
