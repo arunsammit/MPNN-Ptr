@@ -6,10 +6,10 @@ import torch_geometric.utils
 from numpy.random import default_rng
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
+from torch_geometric.data import InMemoryDataset
 from typing import Tuple, List
 import torch
-def generate_graph_data_loader_with_distance_matrix(batch_size):
-    sizes_list = np.array([9, 12, 16, 20, 25, 30, 36])
+def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size):
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
     m = np.ceil(sizes_list/ n).astype(int)
     datalist = []
@@ -62,8 +62,11 @@ if __name__ == '__main__':
     # min_graph_size = 5
     # max_graph_size = 10
     # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
-    dataloader, distance_matrices =  generate_graph_data_loader_with_distance_matrix(10)
-    for data, distance_matrix in zip(dataloader,distance_matrices):
-        print(data)
-        print(distance_matrix.shape)
+    sizes_list = np.array([9, 12, 16, 20, 25, 30, 36, 49])
+    dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 20)
+    torch.save([dataloader49, distance_matrices49], 'data/data_49.pt')
+    dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([49]), 100)
+    torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_49.pt')
+
+
 

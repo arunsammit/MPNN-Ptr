@@ -82,34 +82,13 @@ class Decoder(nn.Module):
         return output, (hidden, cell)
 
 
-class Greedy(nn.Module):
-    def __init__(self):
-        super(Greedy, self).__init__()
-
-    def forward(self, log_p):
-        return torch.argmax(log_p, 1).long()
-
-
-class Categorical(nn.Module):
-    def __init__(self):
-        super(Categorical, self).__init__()
-
-    def forward(self, log_p, num_samples):
-        samples = torch.multinomial(log_p.exp(), num_samples).long()
-        if num_samples == 1:
-            return samples.squeeze(1)
-        else:
-            return samples
-
-
 class PointerNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_layers, p, mapping_selection_method='sampling'):
+    def __init__(self, input_dim, hidden_dim, n_layers, p):
         super().__init__()
         self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
         self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
         self.attn: Attention = Attention(hidden_dim, hidden_dim)
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
-        self.mapping_selection_method = {'greedy': Greedy(), 'sampling': Categorical()}[mapping_selection_method]
 
     def preprocess(self, input, mask):
         lengths = mask.sum(dim=1, dtype=torch.long)
@@ -142,7 +121,7 @@ class PointerNet(nn.Module):
             # logits shape: (batch, seq_len)
             log_probs = F.log_softmax(logits, dim=1)
             # log_probs shape: (batch, seq_len)
-            selected_indices = self.mapping_selection_method(log_probs, 1)
+            selected_indices = torch.argmax(log_probs, 1).long()
             # selected_indices shape: (batch_size,)
             predicted_mappings[:, t] = selected_indices
             log_probs_list.append(log_probs)
@@ -179,7 +158,7 @@ class PointerNet(nn.Module):
                 logits = self.attn(output, encoder_outputs, mask_decoding)
                 log_probs = F.log_softmax(logits, dim=1)
                 # selected_indices shape: (batch, n_samples)
-                selected_indices = self.mapping_selection_method(log_probs, n_samples)
+                selected_indices = torch.multinomial(log_probs.exp(), n_samples).long()
                 predicted_mappings[:, t] = selected_indices.view(-1)
                 mask_decoding = mask_decoding.repeat_interleave(n_samples, dim=0).clone()
                 mask_decoding.scatter_(1, selected_indices.view(-1).unsqueeze(1), 0)
@@ -188,7 +167,7 @@ class PointerNet(nn.Module):
             else:
                 logits = self.attn(output, encoder_outputs.repeat_interleave(n_samples, dim=1), mask_decoding)
                 log_probs = F.log_softmax(logits, dim=1)
-                selected_indices = self.mapping_selection_method(log_probs, 1)
+                selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
                 predicted_mappings[:, t] = selected_indices
                 mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
             decoder_input = input.repeat_interleave(n_samples, dim=1)[selected_indices.view(-1),

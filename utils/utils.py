@@ -21,7 +21,7 @@ def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix
     comm_cost = costs * edge_attr_repeated
     baseline = torch.zeros(batch_size, dtype=torch.float)
     for i in range(batch_size):
-        baseline[i] = -comm_cost[batch[edge_index_repeated[0]] == i].sum()/samples.size(1)
+        baseline[i] = comm_cost[batch[edge_index_repeated[0]] == i].sum()/samples.size(1)
     return baseline
 
 
