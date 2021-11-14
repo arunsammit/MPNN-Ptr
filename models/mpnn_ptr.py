@@ -26,6 +26,10 @@ class MpnnPtr(nn.Module):
         else:
             samples = self.ptr_net.sample_multiple_mappings(batched_embeddings.permute(1,0,2),mask,num_samples)
             return samples, predicted_mappings, log_likelihoods_sum
+    def predict_optimal_mappings_greedy(self, data):
+        embeddings = self.mpnn(data.x, data.edge_index, data.edge_attr)
+        batched_embeddings, mask = torch_geometric.utils.to_dense_batch(embeddings, data.batch)
+        predicted_mappings, log_likelihoods_sum = self.ptr_net.predict_optimal_mappings_greedy(batched_embeddings.permute(1, 0, 2), mask)
 
 
 if __name__ == '__main__':
