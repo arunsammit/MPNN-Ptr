@@ -16,7 +16,7 @@ class MpnnPtr(nn.Module):
     def forward(self, data, num_samples=1):
         # data is batch of graphs
         # pass data through Mpnn to get embeddings
-        embeddings = self.mpnn(data.x, data.edge_index, data.edge_attr)
+        embeddings = self.mpnn(data.x, data.edge_index, data.edge_attr, data.batch)
         # convert the embeddings to pack_padded_sequence
         batched_embeddings, mask = torch_geometric.utils.to_dense_batch(embeddings, data.batch)
         # batched_embeddings shape: (batch_size, max_num_nodes, embedding_dim)
