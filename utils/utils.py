@@ -1,16 +1,14 @@
 import torch
 import torch_geometric
+from torch_scatter import scatter
 def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, distance_matrix, predicted_mappings):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     reverse_mappings = get_reverse_mapping(predicted_mappings)
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
     costs = distance_matrix[reverse_mappings_flattened[edge_index[0]], reverse_mappings_flattened[edge_index[1]]].unsqueeze(-1)
     comm_cost = costs * edge_attr
-    comm_cost.unsqueeze_(-1)
-    comm_cost_each = torch.zeros(batch_size, dtype=torch.float).to(device)
-    for i in range(batch_size):
-        comm_cost_each[i] = comm_cost[batch[edge_index[0]] == i].sum()
-    # remove the for loop if possible
+    comm_cost.squeeze_(-1)
+    comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
     return comm_cost_each
 def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix, samples):
     # samples shape: [batch_size, num_samples, seq_len]
@@ -44,7 +42,8 @@ if __name__ == '__main__':
     # reverse_mappings = get_reverse_mapping(predicted_mappings)
     # print(reverse_mappings)
     from datagenerate import generate_graph_data_loader_with_distance_matrix
-    dataloader, distance_matrices =  generate_graph_data_loader_with_distance_matrix(10)
+    import numpy as np
+    dataloader, distance_matrices =  generate_graph_data_loader_with_distance_matrix(np.array([9, 12, 16, 20, 25, 30, 36, 49]),100)
     for data, distance_matrix in zip(dataloader,distance_matrices):
 
         predicted_mappings = torch.arange(data.num_nodes/data.num_graphs).expand(data.num_graphs, int(data.num_nodes/data.num_graphs)).long()
