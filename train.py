@@ -7,7 +7,7 @@ if __name__ == '__main__':
     dataloader, distance_matrices = torch.load('data/data_single_49.pt')
     max_graph_size = 49
     mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=55, hidden_dim=60, K=3, n_layers=2,
-                       p_dropout=0.1,device=device)
+                       p_dropout=0,device=device)
     mpnn_ptr.to(device)
     optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
     num_epochs = 100
@@ -21,7 +21,7 @@ if __name__ == '__main__':
             # log_likelihoods_sum shape: (batch_size,)
             penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, predicted_mappings)
             penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, samples)
-            loss = (1/data.num_graphs) * torch.sum((penalty.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
+            loss = torch.mean((penalty.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
             optim.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)

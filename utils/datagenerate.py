@@ -15,15 +15,8 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size,devic
     datalist = []
     distance_matrices = []
     for i in range(len(sizes_list)):
-        G = nx.generators.lattice.grid_2d_graph(n[i], m[i])
-        mapping = {(k, l): m[i]*k + l for k in range(n[i]) for l in range(m[i])}
-        G = nx.relabel_nodes(G, mapping)
-        gen = nx.algorithms.shortest_paths.unweighted.all_pairs_shortest_path_length(G)
-        D = np.zeros((len(G.nodes), len(G.nodes)))
-        for i, d in gen:
-            for j, val in d.items():
-                D[i, j] = val
-        distance_matrices.append(torch.from_numpy(D).to(device))
+        D = generate_distance_matrix(n[i], m[i])
+        distance_matrices.append(D.to(device))
     max_size = max(sizes_list)
     for size in sizes_list:
         for j in range(batch_size):
@@ -37,16 +30,32 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size,devic
             data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
             data = data.to(device)
             datalist.append(data)
-    dataloader = DataLoader(datalist, batch_size=batch_size)
+    if len(sizes_list) == 1:
+        dataloader = DataLoader(datalist, batch_size=batch_size, shuffle=True)
+    else:
+        dataloader = DataLoader(datalist, batch_size=batch_size, shuffle=False)
     return dataloader, distance_matrices
 
-def generate_graph_data_list(min_graph_size=10, max_graph_size=50) -> List[Data]:
+
+def generate_distance_matrix(n,m):
+    G = nx.generators.lattice.grid_2d_graph(n, m)
+    mapping = {(k, l): m * k + l for k in range(n) for l in range(m)}
+    G = nx.relabel_nodes(G, mapping)
+    gen = nx.algorithms.shortest_paths.unweighted.all_pairs_shortest_path_length(G)
+    D = np.zeros((len(G.nodes), len(G.nodes)))
+    for i, d in gen:
+        for j, val in d.items():
+            D[i, j] = val
+    return torch.from_numpy(D).float()
+
+
+def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=100) -> List[Data]:
     if max_graph_size < min_graph_size:
         raise ValueError("max_graph_size must be greater than min_graph_size")
     rng = default_rng()
     datalist = []
     graph_sizes = random.choices(range(min_graph_size, max_graph_size, 1), k=100)
-    for i in range(100):
+    for i in range(num_graphs):
         G = nx.generators.random_graphs.fast_gnp_random_graph(graph_sizes[i], .3, directed=True)
         lognormal = rng.lognormal(1, 3, len(G.edges))
         nx.set_edge_attributes(G, {e: {'weight': lognormal[i]} for i, e in enumerate(G.edges)})
