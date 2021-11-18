@@ -9,7 +9,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.data import InMemoryDataset
 from typing import Tuple, List
 import torch
-def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size):
+def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size,device=torch.device('cpu')):
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
     m = np.ceil(sizes_list/ n).astype(int)
     datalist = []
@@ -23,7 +23,7 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size):
         for i, d in gen:
             for j, val in d.items():
                 D[i, j] = val
-        distance_matrices.append(torch.from_numpy(D))
+        distance_matrices.append(torch.from_numpy(D).to(device))
     max_size = max(sizes_list)
     for size in sizes_list:
         for j in range(batch_size):
@@ -32,9 +32,10 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size):
             nx.set_edge_attributes(G, {e: {'weight': lognormal[i]} for i, e in enumerate(G.edges)})
             edge_index = torch.tensor(list(G.edges), dtype=torch.long)
             x = torch.from_numpy(nx.to_numpy_array(G)).float()
-            x_padded = torch.cat([x, torch.zeros(x.shape[0], max_size - x.shape[1])], dim=1)
-            edge_attr = torch.from_numpy(lognormal).float().unsqueeze(-1)
+            x_padded = torch.cat([x, torch.zeros(x.shape[0], max_size - x.shape[1])], dim=1).to(device)
+            edge_attr = torch.from_numpy(lognormal).float().unsqueeze(-1).to(device)
             data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
+            data = data.to(device)
             datalist.append(data)
     dataloader = DataLoader(datalist, batch_size=batch_size)
     return dataloader, distance_matrices
@@ -63,9 +64,10 @@ if __name__ == '__main__':
     # max_graph_size = 10
     # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
     sizes_list = np.array([9, 12, 16, 20, 25, 30, 36, 49])
-    dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 20)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 20, device)
     torch.save([dataloader49, distance_matrices49], 'data/data_49.pt')
-    dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([49]), 100)
+    dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([49]), 100, device)
     torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_49.pt')
 
 

@@ -3,6 +3,7 @@ from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree
 from torch_geometric.loader import DataLoader
+from torch_scatter import scatter
 
 
 class ConnectionsEmbedding(MessagePassing):
@@ -28,7 +29,7 @@ class ConnectionsEmbedding(MessagePassing):
         # print(aggr_out.shape, edge_index.shape)
         row, col = edge_index
         deg = degree(col, aggr_out.size(0), dtype=aggr_out.dtype)
-        return self.layer3(torch.concat([aggr_out, deg.unsqueeze(-1)], dim=1))
+        return self.layer3(torch.cat([aggr_out, deg.unsqueeze(-1)], dim=1))
 
     def forward(self, x, edge_index, edge_attr):
         # x: [N, input_node_dim]
@@ -70,7 +71,7 @@ class Mpnn(MessagePassing):
         self.theta7 = nn.Linear(2 * n_features, n_features, bias=False)
         self.connection_embedding_layer = ConnectionsEmbedding(in_channels=input_node_dim, n_features=n_features)
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index, edge_attr, batch):
         connections_embedding = self.connection_embedding_layer(x, edge_index, edge_attr)
         x = self.node_init_embedding_layer(x)
         row, col = edge_index
@@ -80,8 +81,9 @@ class Mpnn(MessagePassing):
         for k in range(self.K):
             x = self.propagate(edge_index, x=x, edge_attr=edge_attr, connections_embedding=connections_embedding,
                                norm=norm, k=k)
-        avg_x = x.mean(dim=0)
-        avg_x_theta6 = self.theta6(avg_x.unsqueeze(0)).expand(x.shape[0], -1)
+        avg_x = scatter(x, batch, dim=0, dim_size=batch.max() + 1, reduce="mean")\
+            .gather(dim=0, index=batch.unsqueeze(-1).repeat(1, x.size(1)))
+        avg_x_theta6 = self.theta6(avg_x)
         concat = torch.cat([avg_x_theta6, x], dim=1)
         return self.theta7(concat)
 
@@ -92,21 +94,20 @@ class Mpnn(MessagePassing):
 
     def update(self, aggr_out, norm, connections_embedding, x, k):
         out1 = aggr_out * norm.view(-1, 1)
-        out2 = torch.concat([out1, connections_embedding], dim=1)
+        out2 = torch.cat([out1, connections_embedding], dim=1)
         out3 = self.theta4layers[k](out2)
-        out4 = self.theta5layers[k](torch.concat([x, out3], dim=1))
+        out4 = self.theta5layers[k](torch.cat([x, out3], dim=1))
         return out4
 
 
 if __name__ == '__main__':
     from utils.datagenerate import generate_graph_data_list
-
-    min_graph_size = 5
-    max_graph_size = 10
-    data = generate_graph_data_list(min_graph_size=min_graph_size, max_graph_size=max_graph_size)[0]
-    print(data.x.shape, data.edge_index.shape, data.edge_attr.shape)
-    mpnn = Mpnn(input_node_dim=max_graph_size, n_features=12, K=2)
-    embeddings = mpnn(data.x, data.edge_index, data.edge_attr)
-    print(embeddings)
+    max_graph_size = 49
+    dataloader, distance_matrix = torch.load('./data/data_49.pt')
+    mpnn = Mpnn(input_node_dim=max_graph_size, n_features=56, K=2)
+    for data in dataloader:
+        print(data.x.shape, data.edge_index.shape, data.edge_attr.shape)
+        embeddings = mpnn(data.x, data.edge_index, data.edge_attr, data.batch)
+        print(embeddings.shape)
 
 # a,b  a <- b
