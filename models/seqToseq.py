@@ -83,12 +83,13 @@ class Decoder(nn.Module):
 
 
 class PointerNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_layers, p):
+    def __init__(self, input_dim, hidden_dim, n_layers, p, device):
         super().__init__()
         self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
         self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
         self.attn: Attention = Attention(hidden_dim, hidden_dim)
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
+        self.device = device
 
     def preprocess(self, input, mask):
         lengths = mask.sum(dim=1, dtype=torch.long)
@@ -108,7 +109,7 @@ class PointerNet(nn.Module):
         seq_len = input.size(0)
         # Tensor to store the predicted mapping
         # predicted_mappings shape: (batch, seq_len)
-        predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.int64)
+        predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.int64).to(self.device)
         encoder_outputs, (hidden, cell) = self.encoder(input, mask)
         # first input should be a part of model learnable parameters
         decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
@@ -130,7 +131,7 @@ class PointerNet(nn.Module):
             # update the mask_decoding to remove the pointed inputs
             mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
         # calculate the log likelihoods
-        log_probs = torch.stack(log_probs_list, dim=1)
+        log_probs = torch.stack(log_probs_list, dim=1).to(self.device)
         # log_probs shape: (batch, seq_len, seq_len)
         log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
         # log_likelihoods shape: (batch, seq_len)
@@ -148,7 +149,7 @@ class PointerNet(nn.Module):
         input, mask = self.preprocess(input, mask)
         batch_size = input.size(1)
         seq_len = input.size(0)
-        predicted_mappings = torch.zeros(batch_size * n_samples, seq_len, dtype=torch.int64)
+        predicted_mappings = torch.zeros(batch_size * n_samples, seq_len, dtype=torch.int64).to(self.device)
         encoder_outputs, (hidden, cell) = self.encoder(input, mask)
         decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
         mask_decoding = mask.clone()
@@ -187,7 +188,8 @@ if __name__ == '__main__':
     p = 0.1
     batch_size = 4
     max_seq_len = 10
-    model = PointerNet(input_dim, hidden_dim, n_layers, p)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = PointerNet(input_dim, hidden_dim, n_layers, p, device)
     input = torch.randn(max_seq_len, batch_size, input_dim)
     mask = torch.tril(torch.ones(batch_size, max_seq_len))
     mask[-1, :] = 1

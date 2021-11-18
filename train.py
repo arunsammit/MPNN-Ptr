@@ -1,12 +1,16 @@
 if __name__ == '__main__':
     from models.mpnn_ptr import MpnnPtr
-    from utils.datagenerate import generate_graph_data_loader_with_distance_matrix
     from utils.utils import communication_cost, calculate_baseline
     import torch
     from torch import nn
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     dataloader, distance_matrices = torch.load('data/data_single_49.pt')
+    dataloader = dataloader.to(device)
+    distance_matrices = distance_matrices.to(device)
     max_graph_size = 49
-    mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=55, hidden_dim=60, K=3, n_layers=2, p_dropout=0.1)
+    mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=55, hidden_dim=60, K=3, n_layers=2,
+                       p_dropout=0.1,device=device)
+    mpnn_ptr.to(device)
     optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.001)
     num_epochs = 100
     for epoch in range(num_epochs):
