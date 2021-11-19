@@ -54,7 +54,7 @@ def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=10
         raise ValueError("max_graph_size must be greater than min_graph_size")
     rng = default_rng()
     datalist = []
-    graph_sizes = random.choices(range(min_graph_size, max_graph_size, 1), k=100)
+    graph_sizes = random.choices(range(min_graph_size, max_graph_size + 1, 1), k=100)
     for i in range(num_graphs):
         G = nx.generators.random_graphs.fast_gnp_random_graph(graph_sizes[i], .3, directed=True)
         lognormal = rng.lognormal(1, 3, len(G.edges))
@@ -78,6 +78,8 @@ if __name__ == '__main__':
     torch.save([dataloader49, distance_matrices49], 'data/data_49.pt')
     dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([49]), 100, device)
     torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_49.pt')
+    single_graph = generate_graph_data_list(49, 49, 1)[0].to(device)
+    torch.save(single_graph, 'data/data_single_instance_49.pt')
 
 
 
