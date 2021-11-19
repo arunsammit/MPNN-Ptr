@@ -69,17 +69,15 @@ def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=10
     return datalist
 
 if __name__ == '__main__':
-    # min_graph_size = 5
-    # max_graph_size = 10
-    # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
-    sizes_list = np.array([9, 12, 16, 20, 25, 30, 36, 49])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 20, device)
-    torch.save([dataloader49, distance_matrices49], 'data/data_49.pt')
-    dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([49]), 100, device)
-    torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_49.pt')
-    single_graph = generate_graph_data_list(49, 49, 1)[0].to(device)
-    torch.save(single_graph, 'data/data_single_instance_49.pt')
+    # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
+    # sizes_list = np.array([9, 12, 16, 20, 25, 30, 36, 49, 64, 81])
+    # dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 128, device)
+    # torch.save([dataloader49, distance_matrices49], 'data/data_81.pt')
+    # dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([81]), 128, device)
+    # torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_81.pt')
+    single_graph = generate_graph_data_list(42, 42, 1)[0].to(device)
+    torch.save(single_graph, 'data/data_single_instance_42.pt')
 
 
 
