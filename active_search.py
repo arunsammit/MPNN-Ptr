@@ -5,16 +5,17 @@ from torch_geometric.loader import DataLoader
 from models.mpnn_ptr import MpnnPtr
 from utils.utils import communication_cost
 from torch import nn
+import matplotlib.pyplot as plt
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data = torch.load('data/data_single_instance_49.pt')
+    data = torch.load('data/data_single_instance_81.pt')
     graph_size = data.num_nodes
-    batch_size = 10
+    batch_size = 128
     datalist = [data for _ in range(batch_size)]
     dataloader = DataLoader(datalist, batch_size=batch_size)
     n = math.ceil(math.sqrt(graph_size))
     m = math.ceil(graph_size / n)
-    distance_matrix = generate_distance_matrix(7,7).to(device)
+    distance_matrix = generate_distance_matrix(n,m).to(device)
     mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=55, hidden_dim=60, K=3, n_layers=2,
                        p_dropout=0.1, device=device)
     mpnn_ptr.to(device)
@@ -25,6 +26,7 @@ if __name__ == "__main__":
     best_cost = float('inf')
     baseline = torch.tensor(0.0)
     data = next(iter(dataloader))
+    loss_list = []
     for epoch in range(num_epochs):
         num_samples = 1
         predicted_mappings, log_likelihood_sum = mpnn_ptr(data,num_samples)
@@ -44,6 +46,11 @@ if __name__ == "__main__":
         loss.backward()
         nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
         optim.step()
-        print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, best_cost))
+        print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, penalty[min_penalty].item()))
+        loss_list.append(penalty[min_penalty].item())
+        # plot loss vs epoch
+    plt.plot(loss_list)
+    plt.savefig('loss_vs_epoch.png', dpi=600)
+
 
 

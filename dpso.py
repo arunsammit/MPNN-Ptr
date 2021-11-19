@@ -10,21 +10,19 @@ from numpy.random import default_rng
 rng = default_rng()
 #%%
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-single_graph_data = torch.load('data/data_single_instance_49.pt')
+single_graph_data = torch.load('data/data_single_instance_56.pt')
 graph_size = single_graph_data.num_nodes
+print(graph_size)
 n = math.ceil(math.sqrt(graph_size))
 m = math.ceil(graph_size/n)
 batch_size = 100
-#%%
 datalist = [single_graph_data for _ in range(batch_size)]
 # just for using communication_cost function
 dataloader = DataLoader(datalist, batch_size=batch_size)
-#%%datalist = [single_graph_data for _ in range(batch_size)]
 # just for using communication_cost function
 dataloader = DataLoader(datalist, batch_size=batch_size)
 data = next(iter(dataloader))
-#%%
-distance_matrix = generate_distance_matrix(7,7).to(device)
+distance_matrix = generate_distance_matrix(n,m).to(device)
 #%%
 
 def global_best(particle, prtl_fitness):
@@ -66,10 +64,9 @@ def best_bad(prtl, prtl_fit):
 
 
 # DPSO algorithm
-# %%
 if __name__ == "__main__":
     prtl_no = batch_size
-    no_itera = 1000
+    no_itera = 2000
     prtl_size = graph_size
     gbest_list = []
     check = 0
