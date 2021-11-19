@@ -33,13 +33,15 @@ class Encoder(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, enc_dim, dec_dim):
+    def __init__(self, enc_dim, dec_dim, logit_clipping=True, clip_value=10):
         super(Attention, self).__init__()
         self.attn = nn.Sequential(
             nn.Linear(enc_dim + dec_dim, dec_dim),
             nn.Tanh(),
         )
         self.v = nn.Linear(dec_dim, 1, bias=False)
+        self.logit_clipping = logit_clipping
+        self.clip_value = clip_value
 
     def forward(self, decoder_output, encoder_outputs, mask):
         # decoder_output is the output of the decoder of single step
@@ -56,6 +58,8 @@ class Attention(nn.Module):
         energy = self.attn(torch.cat((decoder_output, encoder_outputs), dim=2))
         # energy shape: (batch, seq_len, dec_dim)
         attention = self.v(energy).squeeze(2)
+        if self.logit_clipping:
+            attention = self.clip_value * torch.tanh(attention)
         # use mask to remove the attention weights for padded values
         attention = attention.masked_fill(mask == 0, -1e10)
         # attention shape: (batch, seq_len)
