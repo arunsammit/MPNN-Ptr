@@ -122,7 +122,7 @@ class PointerNet(nn.Module):
             # logits shape: (batch, seq_len)
             log_probs = F.log_softmax(logits, dim=1)
             # log_probs shape: (batch, seq_len)
-            selected_indices = torch.argmax(log_probs, 1).long()
+            selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
             # selected_indices shape: (batch_size,)
             predicted_mappings[:, t] = selected_indices
             log_probs_list.append(log_probs)
