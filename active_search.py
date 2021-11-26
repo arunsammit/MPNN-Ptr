@@ -21,12 +21,12 @@ if __name__ == "__main__":
     mpnn_ptr.to(device)
     mpnn_ptr.train()
     optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
-    num_epochs = 1000
     best_mapping = None
     best_cost = float('inf')
     baseline = torch.tensor(0.0)
     data = next(iter(dataloader))
     loss_list = []
+    num_epochs = 1000
     for epoch in range(num_epochs):
         num_samples = 1
         predicted_mappings, log_likelihood_sum = mpnn_ptr(data,num_samples)
@@ -40,17 +40,22 @@ if __name__ == "__main__":
         if epoch == 0:
             baseline = penalty.mean()
         else:
-            baseline = 0.9 * baseline + 0.1 * penalty.mean()
+            baseline = 0.99 * baseline + 0.01 * penalty.mean()
         loss = torch.mean((penalty.detach() - baseline.detach())*log_likelihood_sum)
         optim.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
         optim.step()
-        print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, penalty[min_penalty].item()))
+        print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, penalty[min_penalty]))
         loss_list.append(penalty[min_penalty].item())
+        # lr_scheduler.step()
         # plot loss vs epoch
-    plt.plot(loss_list)
-    plt.savefig('loss_vs_epoch.png', dpi=600)
+    torch.save(mpnn_ptr, './drive/MyDrive/data_MTP/model_single_42.pt')
+    fig, ax = plt.subplots()  # Create a figure and an axes.
+    ax.plot(loss_list)  # Plot some data on the axes.
+    ax.set_xlabel('number of epochs')  # Add an x-label to the axes.
+    ax.set_ylabel('communication cost')  # Add a y-label to the axes.
+    ax.set_title("communication cost v/s number of epochs")  # Add a title to the axes
 
 
 

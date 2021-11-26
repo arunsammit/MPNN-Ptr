@@ -87,11 +87,11 @@ class Decoder(nn.Module):
 
 
 class PointerNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_layers, p, device):
+    def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True):
         super().__init__()
         self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
         self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
-        self.attn: Attention = Attention(hidden_dim, hidden_dim)
+        self.attn: Attention = Attention(hidden_dim, hidden_dim, logit_clipping)
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
         self.device = device
 
@@ -163,7 +163,7 @@ class PointerNet(nn.Module):
                 logits = self.attn(output, encoder_outputs, mask_decoding)
                 log_probs = F.log_softmax(logits, dim=1)
                 # selected_indices shape: (batch, n_samples)
-                selected_indices = torch.multinomial(log_probs.exp(), n_samples).long()
+                selected_indices = torch.multinomial(log_probs.exp(), n_samples,replacement=True).long()
                 predicted_mappings[:, t] = selected_indices.view(-1)
                 mask_decoding = mask_decoding.repeat_interleave(n_samples, dim=0).clone()
                 mask_decoding.scatter_(1, selected_indices.view(-1).unsqueeze(1), 0)
@@ -183,7 +183,6 @@ class PointerNet(nn.Module):
 
         return predicted_mappings
 
-
 if __name__ == '__main__':
     # test the model
     input_dim = 5
@@ -193,7 +192,7 @@ if __name__ == '__main__':
     batch_size = 4
     max_seq_len = 10
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = PointerNet(input_dim, hidden_dim, n_layers, p, device)
+    model = PointerNet(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True)
     input = torch.randn(max_seq_len, batch_size, input_dim)
     mask = torch.tril(torch.ones(batch_size, max_seq_len))
     mask[-1, :] = 1

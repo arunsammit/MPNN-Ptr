@@ -1,14 +1,12 @@
 import networkx as nx
-import matplotlib.pyplot as plt
 import random
 import numpy as np
-import torch_geometric.utils
 from numpy.random import default_rng
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.data import InMemoryDataset
 from typing import Tuple, List
 import torch
+
 def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size,device=torch.device('cpu')):
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
     m = np.ceil(sizes_list/ n).astype(int)
@@ -46,7 +44,7 @@ def generate_distance_matrix(n,m):
     for i, d in gen:
         for j, val in d.items():
             D[i, j] = val
-    return torch.from_numpy(D).float()
+    return torch.from_numpy(D)
 
 
 def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=100) -> List[Data]:
@@ -67,7 +65,6 @@ def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=10
         data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
         datalist.append(data)
     return datalist
-
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
