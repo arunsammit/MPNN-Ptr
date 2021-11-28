@@ -7,7 +7,7 @@ from torch_geometric.loader import DataLoader
 from typing import Tuple, List
 import torch
 
-def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size,device=torch.device('cpu')):
+def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, device=torch.device('cpu'), shuffle=False) -> DataLoader:
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
     m = np.ceil(sizes_list/ n).astype(int)
     datalist = []
@@ -28,10 +28,7 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size,devic
             data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
             data = data.to(device)
             datalist.append(data)
-    if len(sizes_list) == 1:
-        dataloader = DataLoader(datalist, batch_size=batch_size, shuffle=True)
-    else:
-        dataloader = DataLoader(datalist, batch_size=batch_size, shuffle=False)
+    dataloader = DataLoader(datalist, batch_size=batch_size, shuffle=shuffle)
     return dataloader, distance_matrices
 
 
@@ -71,10 +68,14 @@ if __name__ == '__main__':
     # sizes_list = np.array([9, 12, 16, 20, 25, 30, 36, 49, 64, 81])
     # dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 128, device)
     # torch.save([dataloader49, distance_matrices49], 'data/data_81.pt')
-    # dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array([81]), 128, device)
-    # torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_81.pt')
-    single_graph = generate_graph_data_list(42, 42, 1)[0].to(device)
-    torch.save(single_graph, 'data/data_single_instance_42.pt')
+    num_graphs = 1024
+    batch_size = 128
+    graph_size = 64
+    num_batches = num_graphs // batch_size
+    dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
+    torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_64.pt')
+    # single_graph = generate_graph_data_list(42, 42, 1)[0].to(device)
+    # torch.save(single_graph, 'data/data_single_instance_42.pt')
 
 
 
