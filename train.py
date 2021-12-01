@@ -13,8 +13,7 @@ def init_weights(m):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dataloader, distance_matrices = torch.load('data/data_single_64.pt')
 max_graph_size = 64
-mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=75, hidden_dim=81, K=3, n_layers=4, p_dropout=0,
-                    logit_clipping=False, device=device)
+mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=75, hidden_dim=81, K=3, n_layers=4, p_dropout=0, logit_clipping=False, device=device)
 mpnn_ptr.to(device)
 mpnn_ptr.apply(init_weights)
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.001)
@@ -31,11 +30,9 @@ for epoch in range(num_epochs):
         # samples shape: (batch_size, num_samples, max_graph_size_in_batch)
         # predicted_mappings shape: (batch_size, max_graph_size_in_batch)
         # log_likelihoods_sum shape: (batch_size,)
-        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix,
-                                        predicted_mappings)
+        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, predicted_mappings)
         epoch_penalty[i] = penalty.mean()
-        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, data.num_graphs,
-                                                distance_matrix, samples)
+        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, samples)
         loss = torch.mean((penalty.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
         optim.zero_grad()
         loss.backward()

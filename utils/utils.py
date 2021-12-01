@@ -3,6 +3,7 @@ import torch
 import torch_geometric
 from torch_scatter import scatter
 #%%
+@torch.no_grad()
 def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, distance_matrix, predicted_mappings):
     reverse_mappings = get_reverse_mapping(predicted_mappings)
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
@@ -13,9 +14,9 @@ def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, di
     comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
     return comm_cost_each
 #%%
+@torch.no_grad()
 def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix, samples):
     # samples shape: [batch_size, num_samples, seq_len]
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     reverse_mappings = get_reverse_mapping(samples.view(-1, samples.size(-1)))
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
     edge_index_repeated = edge_index.repeat_interleave(samples.size(1), dim=1)

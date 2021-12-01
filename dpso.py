@@ -36,13 +36,16 @@ def global_best(particle, prtl_fitness):
     gbest_fit = prtl_fitness[min_id]
     return gbest, gbest_fit
 #%%
+@njit
+def rand_permute2D(particle):
+    for i in range(particle.shape[0]):
+        particle[i] = np.random.permutation(particle.shape[1])
+#%%
 # funtion for particle intializaton , fitness evaluation, global_best, local_best
 def prtl_init(prtl_no, prtl_size):
     particle = np.zeros((prtl_no, prtl_size), dtype=np.long)
-    for i in range(prtl_no):
-        particle[i] = rng.permutation(prtl_size)
-    with torch.no_grad():
-        prtl_fitness = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(particle))
+    rand_permute2D(particle)
+    prtl_fitness = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(particle))
     prtl_fitness = prtl_fitness.detach().numpy()
     return particle, prtl_fitness
 #%%
@@ -52,17 +55,11 @@ def best_bad(prtl, prtl_fit):
     l = prtl.shape[0]
     bstp_no = l // 2
     partition_ids = np.argpartition(prtl_fit, -bstp_no)
-    # ids of best particles
-    bstp_ids = partition_ids[-bstp_no:]
     # ids of bad particles
-    badp_ids = partition_ids[:-bstp_no]
-    best_partl = prtl[bstp_ids]
-    bad_partl = prtl[badp_ids]
-    # fitness of best particles
-    best_fit = prtl_fit[bstp_ids]
-    # fitness of bad particles
-    bad_fit = prtl_fit[badp_ids]
-    return best_partl, best_fit, bad_partl, bad_fit
+    badp_ids = partition_ids[-bstp_no:]
+    # ids of best particles
+    bstp_ids = partition_ids[:-bstp_no]
+    return bstp_ids, badp_ids
 #%%
 @njit
 def transform(idxs, curr_prtl, trns_to_prtl):
@@ -106,7 +103,9 @@ if __name__ == "__main__":
     print('gbest', gbest)
 
     for j in range(no_itera):
-        bst_prtl, best_fit, bad_prtl, bad_fit = best_bad(prtl, prtl_fit)
+        bstp_ids, badp_ids = best_bad(prtl, prtl_fit)
+        bst_prtl = prtl[bstp_ids]
+        bad_prtl = prtl[badp_ids]
         rand_loc = rng.permutation(prtl_size)
         swap_limit_good = math.ceil(prtl_size / 4)
         swap_limit_bad = math.ceil(prtl_size / 2)
@@ -117,16 +116,17 @@ if __name__ == "__main__":
         # next generation of good particles
         evolve_particles(lbest_loc, gbest_loc, bst_prtl, lcl_bst_prtl, gbest)
         # next generation of bad particles
+        rand_permute2D(bad_prtl)
         evolve_particles(bad_loc1, bad_loc2, bad_prtl, lcl_bst_prtl, gbest)
         # calculate global and local best for this generation
         prtl = np.vstack((bst_prtl, bad_prtl))
-        with torch.no_grad():
-            prtl_fit = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(prtl))
+        prtl_fit = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(prtl))
         prtl_fit = prtl_fit.detach().numpy()
         # update lcl_bst_prtl and lcl_bst_fit
-        update_condition = prtl_fit < lcl_bst_fit
-        lcl_bst_prtl = np.where(update_condition.reshape(prtl_no, 1), prtl, lcl_bst_prtl)
-        lcl_bst_fit = np.where(update_condition, prtl_fit, lcl_bst_fit)
+        all_ids = np.concatenate((bstp_ids, badp_ids))
+        update_condition = prtl_fit < lcl_bst_fit[all_ids]
+        lcl_bst_prtl = np.where(update_condition.reshape(prtl_no, 1), prtl, lcl_bst_prtl[all_ids, :])
+        lcl_bst_fit = np.where(update_condition, prtl_fit, lcl_bst_fit[all_ids])
         # update gbest and gbfit for this generation
         gbest, gbfit = global_best(prtl, prtl_fit)
 
