@@ -54,7 +54,7 @@ for epoch in range(num_epochs):
     print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, penalty[min_penalty]))
     loss_list.append(penalty[min_penalty].item())
     # lr_scheduler.step()
-torch.save(mpnn_ptr.state_dict(), './models_data/model_single_42.pt')
+torch.save(mpnn_ptr.state_dict(), './models_data/model_single_64.pt')
 print('Best cost: {}'.format(best_cost))
 # plot loss vs epoch
 fig, ax = plt.subplots()  # Create a figure and an axes.
