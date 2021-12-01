@@ -14,7 +14,6 @@ from numba import njit
 rng = default_rng()
 
 #%%
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu")
 single_graph_data = torch.load('data/data_single_instance_64.pt').to(device)
 graph_size = single_graph_data.num_nodes
@@ -42,12 +41,10 @@ def prtl_init(prtl_no, prtl_size):
     particle = np.zeros((prtl_no, prtl_size), dtype=np.long)
     for i in range(prtl_no):
         particle[i] = rng.permutation(prtl_size)
-
-    prtl_fitness = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(particle))
+    with torch.no_grad():
+        prtl_fitness = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(particle))
     prtl_fitness = prtl_fitness.detach().numpy()
-    prtl_lbest = np.copy(particle)
-
-    return particle, prtl_fitness, prtl_lbest
+    return particle, prtl_fitness
 #%%
 
 # finding best and bad particles
@@ -96,18 +93,20 @@ def evolve_particles(lcl_locs, gbest_locs, prtls, lcl_bst_prtl, gbest):
 # DPSO algorithm
 if __name__ == "__main__":
     prtl_no = batch_size
-    no_itera = 5000
+    no_itera = 10000
     prtl_size = graph_size
     gbest_list = []
     check = 0
     # paricle intialization
-    prtl, pfit, lcl_bst_prtl = prtl_init(prtl_no, prtl_size)
-    gbest, gbfit = global_best(prtl, pfit)
+    prtl, prtl_fit = prtl_init(prtl_no, prtl_size)
+    lcl_bst_prtl = np.copy(prtl)
+    lcl_bst_fit = np.copy(prtl_fit)
+    gbest, gbfit = global_best(prtl, prtl_fit)
     gbest_list.append((gbest, gbfit))
     print('gbest', gbest)
 
     for j in range(no_itera):
-        bst_prtl, best_fit, bad_prtl, bad_fit = best_bad(prtl, pfit)
+        bst_prtl, best_fit, bad_prtl, bad_fit = best_bad(prtl, prtl_fit)
         rand_loc = rng.permutation(prtl_size)
         swap_limit_good = math.ceil(prtl_size / 4)
         swap_limit_bad = math.ceil(prtl_size / 2)
@@ -116,31 +115,20 @@ if __name__ == "__main__":
         bad_loc1 = rand_loc[0:swap_limit_bad // 2]
         bad_loc2 = rand_loc[swap_limit_bad // 2:swap_limit_bad]
         # next generation of good particles
-        for i in range(bst_prtl.shape[0]):
-            curr_prtl = bst_prtl[i]
-            curr_lcl_bst_prtl = lcl_bst_prtl[i]
-            transform(lbest_loc, curr_prtl, curr_lcl_bst_prtl)
-            transform(gbest_loc, curr_prtl, gbest)
-
+        evolve_particles(lbest_loc, gbest_loc, bst_prtl, lcl_bst_prtl, gbest)
         # next generation of bad particles
-        for i in range(bad_prtl.shape[0]):
-            curr_prtl = bad_prtl[i]
-            np.random.shuffle(curr_prtl)
-            curr_lcl_bst_prtl = lcl_bst_prtl[i]
-            transform(bad_loc1, curr_prtl, curr_lcl_bst_prtl)
-            transform(bad_loc2, curr_prtl, gbest)
-
+        evolve_particles(bad_loc1, bad_loc2, bad_prtl, lcl_bst_prtl, gbest)
         # calculate global and local best for this generation
         prtl = np.vstack((bst_prtl, bad_prtl))
-        pfit = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(prtl))
-        pfit = pfit.detach().numpy()
-        for num in range(prtl.shape[0]):
-            fit = pfit[num]
-            if (fit < pfit[num]):
-                lcl_bst_prtl[num] = prtl[num]
-                pfit[num] = fit
-
-        gbest, gbfit = global_best(prtl, pfit)
+        with torch.no_grad():
+            prtl_fit = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(prtl))
+        prtl_fit = prtl_fit.detach().numpy()
+        # update lcl_bst_prtl and lcl_bst_fit
+        update_condition = prtl_fit < lcl_bst_fit
+        lcl_bst_prtl = np.where(update_condition.reshape(prtl_no, 1), prtl, lcl_bst_prtl)
+        lcl_bst_fit = np.where(update_condition, prtl_fit, lcl_bst_fit)
+        # update gbest and gbfit for this generation
+        gbest, gbfit = global_best(prtl, prtl_fit)
 
         if (j % 10 == 0):
             print('gbest = %d after iteration = %d' % (gbfit, j))

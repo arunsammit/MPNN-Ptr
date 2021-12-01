@@ -1,8 +1,9 @@
+#%%
 import torch
 import torch_geometric
 from torch_scatter import scatter
+#%%
 def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, distance_matrix, predicted_mappings):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     reverse_mappings = get_reverse_mapping(predicted_mappings)
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
     costs = distance_matrix[reverse_mappings_flattened[edge_index[0]], reverse_mappings_flattened[edge_index[1]]]\
@@ -11,6 +12,7 @@ def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, di
     comm_cost.squeeze_(-1)
     comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
     return comm_cost_each
+#%%
 def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix, samples):
     # samples shape: [batch_size, num_samples, seq_len]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -22,9 +24,9 @@ def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix
     comm_cost = costs * edge_attr_repeated
     baseline_each = scatter(comm_cost, batch[edge_index_repeated[0]], dim=0, dim_size=batch_size, reduce='mean')
     return baseline_each
-
+#%%
 def get_reverse_mapping(predicted_mappings):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = predicted_mappings.device
     mask = predicted_mappings == -1
     reverse_mappings = torch.zeros_like(predicted_mappings)
     indices = torch.arange(predicted_mappings.size(1)).expand(predicted_mappings.size(0), predicted_mappings.size(1))\
@@ -34,6 +36,7 @@ def get_reverse_mapping(predicted_mappings):
     indices.masked_fill_(mask, -1)
     reverse_mappings.scatter_(1, predicted_mappings, indices)
     return reverse_mappings
+#%%
 if __name__ == '__main__':
     predicted_mappings = torch.tensor([[0, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                                        [1, 0, -1, -1, -1, -1, -1, -1, -1, -1],

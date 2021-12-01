@@ -68,14 +68,14 @@ if __name__ == '__main__':
     # sizes_list = np.array([9, 12, 16, 20, 25, 30, 36, 49, 64, 81])
     # dataloader49, distance_matrices49 = generate_graph_data_loader_with_distance_matrix(sizes_list, 128, device)
     # torch.save([dataloader49, distance_matrices49], 'data/data_81.pt')
-    num_graphs = 1024
-    batch_size = 128
-    graph_size = 64
-    num_batches = num_graphs // batch_size
-    dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
-    torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_64.pt')
-    # single_graph = generate_graph_data_list(42, 42, 1)[0].to(device)
-    # torch.save(single_graph, 'data/data_single_instance_42.pt')
+    # num_graphs = 1024
+    # batch_size = 128
+    # graph_size = 64
+    # num_batches = num_graphs // batch_size
+    # dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
+    # torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_64.pt')
+    single_graph = generate_graph_data_list(64, 64, 1)[0].to(device)
+    torch.save(single_graph, 'data/data_single_instance_64.pt')
 
 
 
