@@ -13,19 +13,19 @@ def init_weights(m):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dataloader, distance_matrices = torch.load('data/data_single_64.pt')
 max_graph_size = 64
-mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=75, hidden_dim=81, K=3, n_layers=4, p_dropout=0.2,
+mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=75, hidden_dim=81, K=3, n_layers=4, p_dropout=0,
                     logit_clipping=False, device=device)
 mpnn_ptr.to(device)
 mpnn_ptr.apply(init_weights)
-optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
-num_epochs = 4000
+optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.001)
+num_epochs = 5000
 epoch_penalty = torch.zeros(len(dataloader))
 loss_list_pre = []
 #%%
 for epoch in range(num_epochs):
     epoch_penalty[:] = 0
     for i, (data, distance_matrix) in enumerate(zip(dataloader, distance_matrices)):
-        num_samples = 16
+        num_samples = 32
         mpnn_ptr.train()
         samples, predicted_mappings, log_likelihoods_sum = mpnn_ptr(data, num_samples)
         # samples shape: (batch_size, num_samples, max_graph_size_in_batch)
@@ -57,6 +57,7 @@ ax.plot(loss_list_pre)
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Communication cost')
 # save figure
+
 fig.savefig('plots/loss_list_pre.png', dpi=300)
 
 # %%
