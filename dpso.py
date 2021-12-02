@@ -4,30 +4,12 @@ from numpy.core.numeric import NaN
 import torch
 import time
 import math
-
-from torch._C import NoneType
 from utils.utils import communication_cost
 from utils.datagenerate import generate_distance_matrix
 from torch_geometric.loader import DataLoader
-from numpy.random import default_rng
 from numba import njit
-rng = default_rng()
-
-#%%
-device = torch.device("cpu")
-single_graph_data = torch.load('data/data_single_instance_64.pt').to(device)
-graph_size = single_graph_data.num_nodes
-print(graph_size)
-n = math.ceil(math.sqrt(graph_size))
-m = math.ceil(graph_size/n)
-batch_size = 128
-datalist = [single_graph_data for _ in range(batch_size)]
-# just for using communication_cost function
-dataloader = DataLoader(datalist, batch_size=batch_size)
-# just for using communication_cost function
-dataloader = DataLoader(datalist, batch_size=batch_size)
-data = next(iter(dataloader))
-distance_matrix = generate_distance_matrix(n,m).to(device)
+import sys
+rng = np.random.default_rng()
 #%%
 
 def global_best(particle, prtl_fitness):
@@ -89,7 +71,22 @@ def evolve_particles(lcl_locs, gbest_locs, prtls, lcl_bst_prtl, gbest):
 #%%
 # DPSO algorithm
 if __name__ == "__main__":
-    prtl_no = batch_size
+    if len(sys.argv) != 3:
+        print("Usage: python3 dpso.py <dataset> <no_of_particles>")
+        sys.exit(1)
+    device = torch.device("cpu")
+    single_graph_data = torch.load(sys.argv[1]).to(device)
+    prtl_no = int(sys.argv[2])
+    graph_size = single_graph_data.num_nodes
+    n = math.ceil(math.sqrt(graph_size))
+    m = math.ceil(graph_size/n)
+    datalist = [single_graph_data for _ in range(prtl_no)]
+    # just for using communication_cost function
+    dataloader = DataLoader(datalist, batch_size=prtl_no)
+    # just for using communication_cost function
+    dataloader = DataLoader(datalist, batch_size=prtl_no)
+    data = next(iter(dataloader))
+    distance_matrix = generate_distance_matrix(n,m).to(device)
     no_itera = 10000
     prtl_size = graph_size
     gbest_list = []
@@ -100,8 +97,6 @@ if __name__ == "__main__":
     lcl_bst_fit = np.copy(prtl_fit)
     gbest, gbfit = global_best(prtl, prtl_fit)
     gbest_list.append((gbest, gbfit))
-    print('gbest', gbest)
-
     for j in range(no_itera):
         bstp_ids, badp_ids = best_bad(prtl, prtl_fit)
         bst_prtl = prtl[bstp_ids]
