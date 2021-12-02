@@ -75,7 +75,7 @@ if __name__ == "__main__":
         print("Usage: python3 dpso.py <dataset> <no_of_particles>")
         sys.exit(1)
     device = torch.device("cpu")
-    single_graph_data = torch.load(sys.argv[1]).to(device)
+    single_graph_data = torch.load(sys.argv[1],map_location=device)
     prtl_no = int(sys.argv[2])
     graph_size = single_graph_data.num_nodes
     n = math.ceil(math.sqrt(graph_size))
