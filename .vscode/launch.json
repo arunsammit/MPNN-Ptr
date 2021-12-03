@@ -5,6 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Attach",
+            "type": "python",
+            "request": "attach",
+            "connect": {
+                "host": "2.tcp.ngrok.io",
+                "port": 38433
+            }
+        },
+        {
+            "name": "dpso",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/dpso.py",
+            "args": [
+                "./data/data_single_instance_64.pt",
+                "512"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

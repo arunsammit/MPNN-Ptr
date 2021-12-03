@@ -4,8 +4,9 @@ import numpy as np
 from numpy.random import default_rng
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from typing import Tuple, List
+from typing import List
 import torch
+import sys
 
 def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, device=torch.device('cpu'), shuffle=False) -> DataLoader:
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
@@ -49,7 +50,7 @@ def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=10
         raise ValueError("max_graph_size must be greater than min_graph_size")
     rng = default_rng()
     datalist = []
-    graph_sizes = random.choices(range(min_graph_size, max_graph_size + 1, 1), k=100)
+    graph_sizes = random.choices(range(min_graph_size, max_graph_size + 1, 1), k=num_graphs)
     for i in range(num_graphs):
         G = nx.generators.random_graphs.fast_gnp_random_graph(graph_sizes[i], .3, directed=True)
         lognormal = rng.lognormal(1, 3, len(G.edges))
@@ -74,8 +75,28 @@ if __name__ == '__main__':
     # num_batches = num_graphs // batch_size
     # dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
     # torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_64.pt')
-    single_graph = generate_graph_data_list(64, 64, 1)[0].to(device)
-    torch.save(single_graph, 'data/data_single_instance_64.pt')
+    if len(sys.argv) < 2:
+        print('Usage: python3 datagenerate.py <single_instance/single/multi> <graph_size> <num_batches (not needed for single_instance)> <batch_size>')
+        sys.exit(1)
+    if sys.argv[1] == 'single_instance':
+        graph_size = int(sys.argv[2])
+        save_path = 'data/data_single_instance_{}.pt'.format(graph_size)
+        single_graph = generate_graph_data_list(graph_size, graph_size, 1)[0].to(device)
+        torch.save(single_graph, save_path)
+    elif sys.argv[1] == 'single':
+        graph_size = int(sys.argv[2])
+        num_batches = int(sys.argv[3])
+        batch_size = int(sys.argv[4])
+        dataloader, distance_matrices = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
+        torch.save([dataloader, distance_matrices], 'data/data_single_{}.pt'.format(graph_size))
+    elif sys.argv[1] == 'multi':
+        sizes_list = np.array(sys.argv[2:len(sys.argv)-2])
+        num_batches = int(sys.argv[-2])
+        batch_size = int(sys.argv[-1])
+        max_graph_size = sizes_list.max()
+        dataloader, distance_matrices = generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, device, shuffle=True)
+        torch.save([dataloader, distance_matrices], 'data/data_{}.pt'.format(max_graph_size))
+
 
 
 
