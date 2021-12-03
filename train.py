@@ -13,7 +13,7 @@ def init_weights(m):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dataloader, distance_matrices = torch.load('data/data_single_64.pt')
 max_graph_size = 64
-mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=75, hidden_dim=81, K=3, n_layers=4, p_dropout=0, logit_clipping=False, device=device)
+mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=75, hidden_dim=81, K=3, n_layers=4, p_dropout=0.1, logit_clipping=False, device=device)
 mpnn_ptr.to(device)
 mpnn_ptr.apply(init_weights)
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.001)
