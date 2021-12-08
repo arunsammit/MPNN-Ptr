@@ -19,7 +19,7 @@ class Encoder(nn.Module):
         # mask shape: (batch, seq_len)
         lengths = mask.sum(dim=1)
         # lengths shape: (batch)
-        packed_inputs = torch.nn.utils.rnn.pack_padded_sequence(input, lengths.to('cpu'),
+        packed_inputs = pack_padded_sequence(input, lengths.to('cpu'),
                                                                 enforce_sorted=False)
         packed_outputs, (hidden, cell) = self.rnn(packed_inputs)
         output, _ = pad_packed_sequence(packed_outputs)

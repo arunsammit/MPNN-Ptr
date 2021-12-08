@@ -32,7 +32,7 @@ if(args_len>4):
     mpnn_ptr.load_state_dict(torch.load(sys.argv[4]))
 mpnn_ptr.to(device)
 mpnn_ptr.train()
-optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
+optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.00001)
 best_mapping = None
 best_cost = float('inf')
 baseline = torch.tensor(0.0)
@@ -65,7 +65,7 @@ for epoch in range(num_epochs):
         count_not_decrease += 1
     else:
         count_not_decrease = 0
-    if count_not_decrease > 10000:
+    if count_not_decrease > 20000:
         break    
     loss_list.append(penalty[min_penalty].item())
     # lr_scheduler.step()

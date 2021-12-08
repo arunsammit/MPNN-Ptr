@@ -9,6 +9,7 @@ from utils.datagenerate import generate_distance_matrix
 from torch_geometric.loader import DataLoader
 from numba import njit
 import sys
+from models.mpnn_ptr import MpnnPtr
 rng = np.random.default_rng()
 #%%
 
@@ -24,7 +25,7 @@ def rand_permute2D(particle):
         particle[i] = np.random.permutation(particle.shape[1])
 #%%
 # funtion for particle intializaton , fitness evaluation, global_best, local_best
-def prtl_init(prtl_no, prtl_size):
+def prtl_init(prtl_no, prtl_size, data, distance_matrix):
     particle = np.zeros((prtl_no, prtl_size), dtype=np.long)
     rand_permute2D(particle)
     prtl_fitness = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, torch.from_numpy(particle))
@@ -69,10 +70,26 @@ def evolve_particles(lcl_locs, gbest_locs, prtls, lcl_bst_prtl, gbest):
         transform(lcl_locs, curr_prtl, curr_lcl_bst_prtl)
         transform(gbest_locs, curr_prtl, gbest)
 #%%
+# genenrate initial population using mpnn_ptr model
+def prtl_init_model(prtl_no, prtl_size, data, distance_matrix, model_path):
+    # load model
+    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True)
+    mpnn_ptr.load_state_dict(torch.load(model_path))
+    mpnn_ptr.eval()
+    with torch.no_grad():
+        # generate initial population
+        num_samples = 1
+        particle, _ = mpnn_ptr(data, num_samples)
+        prtl_fitness = communication_cost(data.edge_index,data.edge_attr,data.batch, prtl_no, distance_matrix, particle)
+        particle = particle.detach().numpy()
+        prtl_fitness = prtl_fitness.detach().numpy()
+    return particle, prtl_fitness
+
+#%%
 # DPSO algorithm
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python3 dpso.py <dataset> <no_of_particles>")
+    if len(sys.argv) < 4:
+        print("Usage: python3 dpso.py <dataset> <no_of_particles> <initial_population_generation_method(random/model)> <model_path>")
         sys.exit(1)
     device = torch.device("cpu")
     single_graph_data = torch.load(sys.argv[1],map_location=device)
@@ -92,7 +109,16 @@ if __name__ == "__main__":
     gbest_list = []
     check = 0
     # paricle intialization
-    prtl, prtl_fit = prtl_init(prtl_no, prtl_size)
+    if sys.argv[3] == "random":
+        prtl, prtl_fit = prtl_init(prtl_no, prtl_size, distance_matrix, data)
+    elif sys.argv[3] == "model":
+        datalist_half = datalist[:prtl_no//2]
+        dataloader_half = DataLoader(datalist_half, batch_size=prtl_no//2)
+        prtl1, prtl_fit1 = prtl_init_model(prtl_no, prtl_size, dataloader_half, distance_matrix, sys.argv[4])
+        datalist_half = datalist[prtl_no//2:]
+        dataloader_half = DataLoader(datalist_half, batch_size=prtl_no//2)
+        #use random initialization for the rest of the particles
+        prtl2, prtl_fit2 = prtl_init(prtl_no, prtl_size, distance_matrix, data)
     lcl_bst_prtl = np.copy(prtl)
     lcl_bst_fit = np.copy(prtl_fit)
     gbest, gbfit = global_best(prtl, prtl_fit)
@@ -142,3 +168,6 @@ if __name__ == "__main__":
     print(f'best cost = {gb_fits.min()}')
 
 # %%
+# x1 x2 x3 x4 x5
+# x2 x4 x5 x1 x2 //after sorting to get best and bad particles
+# l1 l2 l3 l4 l5
