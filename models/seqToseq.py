@@ -1,3 +1,4 @@
+from typing import Tuple
 from torch import Tensor, nn
 import torch
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, PackedSequence
@@ -19,7 +20,7 @@ class Encoder(nn.Module):
         # mask shape: (batch, seq_len)
         lengths = mask.sum(dim=1)
         # lengths shape: (batch)
-        packed_inputs = torch.nn.utils.rnn.pack_padded_sequence(input, lengths.to('cpu'),
+        packed_inputs = pack_padded_sequence(input, lengths.to('cpu'),
                                                                 enforce_sorted=False)
         packed_outputs, (hidden, cell) = self.rnn(packed_inputs)
         output, _ = pad_packed_sequence(packed_outputs)
@@ -95,7 +96,7 @@ class PointerNet(nn.Module):
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
         self.device = device
 
-    def preprocess(self, input, mask):
+    def preprocess(self, input, mask) -> Tuple[Tensor, Tensor]:
         lengths = mask.sum(dim=1, dtype=torch.long)
         # seq_len is the length of the longest sequence in the batch
         seq_len = torch.max(lengths).item()
@@ -108,6 +109,7 @@ class PointerNet(nn.Module):
     def forward(self, input: Tensor, mask):
         # input shape: (seq_len, batch, input_dim)
         # mask shape: (batch, seq_len)
+        self.preprocess(input, mask)
         input, mask = self.preprocess(input, mask)
         batch_size = input.size(1)
         seq_len = input.size(0)
@@ -194,8 +196,8 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = PointerNet(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True)
     input = torch.randn(max_seq_len, batch_size, input_dim)
-    mask = torch.tril(torch.ones(batch_size, max_seq_len))
-    mask[-1, :] = 1
+    mask = torch.tril(torch.ones(batch_size, max_seq_len)).to(device)
+    # mask[-1, :] = 1
     predicted_mappings, log_likelihoods_sum = model(input, mask)
     samples = model.sample_multiple_mappings(input, mask, n_samples=2)
     print(samples)
