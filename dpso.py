@@ -110,7 +110,7 @@ if __name__ == "__main__":
     check = 0
     # paricle intialization
     if sys.argv[3] == "random":
-        prtl, prtl_fit = prtl_init(prtl_no, prtl_size, distance_matrix, data)
+        prtl, prtl_fit = prtl_init(prtl_no, prtl_size, data, distance_matrix)
     elif sys.argv[3] == "model":
         datalist_half = datalist[:prtl_no//2]
         dataloader_half = DataLoader(datalist_half, batch_size=prtl_no//2)

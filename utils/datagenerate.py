@@ -1,3 +1,4 @@
+#%%
 import networkx as nx
 import random
 import numpy as np
@@ -7,12 +8,13 @@ from torch_geometric.loader import DataLoader
 from typing import List
 import torch
 import sys
-
+#%%
 def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, device=torch.device('cpu'), shuffle=False) -> DataLoader:
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
     m = np.ceil(sizes_list/ n).astype(int)
     datalist = []
     distance_matrices = []
+    rng = default_rng()
     for i in range(len(sizes_list)):
         D = generate_distance_matrix(n[i], m[i])
         distance_matrices.append(D.to(device))
@@ -20,12 +22,12 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, devi
     for size in sizes_list:
         for j in range(batch_size):
             G = nx.generators.random_graphs.fast_gnp_random_graph(size, .3, directed=True)
-            lognormal = np.random.lognormal(1, 3, len(G.edges))
-            nx.set_edge_attributes(G, {e: {'weight': lognormal[i]} for i, e in enumerate(G.edges)})
+            uniform = 1 - rng.uniform(0, 1, len(G.edges))
+            nx.set_edge_attributes(G, {e: {'weight': uniform[i]} for i, e in enumerate(G.edges)})
             edge_index = torch.tensor(list(G.edges), dtype=torch.long)
             x = torch.from_numpy(nx.to_numpy_array(G)).float()
             x_padded = torch.cat([x, torch.zeros(x.shape[0], max_size - x.shape[1])], dim=1).to(device)
-            edge_attr = torch.from_numpy(lognormal).float().unsqueeze(-1).to(device)
+            edge_attr = torch.from_numpy(uniform).float().unsqueeze(-1).to(device)
             data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
             data = data.to(device)
             datalist.append(data)
@@ -53,16 +55,24 @@ def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=10
     graph_sizes = random.choices(range(min_graph_size, max_graph_size + 1, 1), k=num_graphs)
     for i in range(num_graphs):
         G = nx.generators.random_graphs.fast_gnp_random_graph(graph_sizes[i], .3, directed=True)
-        lognormal = rng.lognormal(1, 3, len(G.edges))
-        nx.set_edge_attributes(G, {e: {'weight': lognormal[i]} for i, e in enumerate(G.edges)})
+        uniform = 1- rng.uniform(0, 1, len(G.edges))
+        nx.set_edge_attributes(G, {e: {'weight': uniform[i]} for i, e in enumerate(G.edges)})
         edge_index = torch.tensor(list(G.edges), dtype=torch.long)
         x = torch.from_numpy(nx.to_numpy_array(G)).float()
         x_padded = torch.cat([x, torch.zeros(x.shape[0], max_graph_size - x.shape[1])], dim=1)
-        edge_attr = torch.from_numpy(lognormal).float().unsqueeze(-1)
+        edge_attr = torch.from_numpy(uniform).float().unsqueeze(-1)
         # print(edge_attr.shape)
         data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
         datalist.append(data)
     return datalist
+# def normalize_graph_data(data:Data)->Data:
+#     x_max = data.x.max()
+#     data.x = data.x / x_max
+#     data.edge_attr = data.edge_attr / x_max
+#     return data
+    
+
+
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # graph_data_list = generate_graph_data_list(min_graph_size, max_graph_size)
@@ -80,7 +90,7 @@ if __name__ == '__main__':
         sys.exit(1)
     if sys.argv[1] == 'single_instance':
         graph_size = int(sys.argv[2])
-        save_path = 'data/data_single_instance_{}.pt'.format(graph_size)
+        save_path = 'data/data_single_instance_uniform_{}.pt'.format(graph_size)
         single_graph = generate_graph_data_list(graph_size, graph_size, 1)[0].to(device)
         torch.save(single_graph, save_path)
     elif sys.argv[1] == 'single':

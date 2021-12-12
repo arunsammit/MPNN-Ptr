@@ -32,11 +32,12 @@ if(args_len>4):
     mpnn_ptr.load_state_dict(torch.load(sys.argv[4]))
 mpnn_ptr.to(device)
 mpnn_ptr.train()
-optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.00001)
+optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
 best_mapping = None
 best_cost = float('inf')
 baseline = torch.tensor(0.0)
 data = next(iter(dataloader))
+
 loss_list = []
 num_epochs = int(sys.argv[2])
 count_not_decrease = 0
@@ -59,7 +60,8 @@ for epoch in range(num_epochs):
     loss.backward()
     nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
     optim.step()
-    print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, penalty[min_penalty]))
+    if epoch % 10 == 0:
+        print('Epoch: {}/{}, Loss: {} '.format(epoch + 1, num_epochs, penalty.mean()))
     # break the training loop if min_penalty is not decreasing for consecutive 10000 epochs
     if penalty[min_penalty] > best_cost:
         count_not_decrease += 1
@@ -67,9 +69,9 @@ for epoch in range(num_epochs):
         count_not_decrease = 0
     if count_not_decrease > 20000:
         break    
-    loss_list.append(penalty[min_penalty].item())
+    loss_list.append(penalty.mean().item())
     # lr_scheduler.step()
-torch.save(mpnn_ptr.state_dict(), f'./models_data/model_single_{graph_size}.pt')
+torch.save(mpnn_ptr.state_dict(), f'./models_data/model_single_uniform_{graph_size}.pt')
 print('Best cost: {}'.format(best_cost))
 # plot loss vs epoch
 fig, ax = plt.subplots()  # Create a figure and an axes.
@@ -77,6 +79,6 @@ ax.plot(loss_list)  # Plot some data on the axes.
 ax.set_xlabel('number of epochs')  # Add an x-label to the axes.
 ax.set_ylabel('communication cost')  # Add a y-label to the axes.
 ax.set_title("communication cost v/s number of epochs")  # Add a title to the axes
-fig.savefig(f'./plots/loss_single_{graph_size}.png')  # Save the figure.
+fig.savefig(f'./plots/loss_single_uniform_{graph_size}_2.png')  # Save the figure.
 
 

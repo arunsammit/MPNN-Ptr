@@ -28,6 +28,7 @@ def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix
     return baseline_each
 @torch.no_grad()
 def paired_t_test(penalty_curr, penalty_baseline):
+    # FIXME: complete paired t-test function
     # penalty_curr: [batch_size]
     # penalty_baseline: [batch_size]
     diff:torch.Tensor = penalty_curr - penalty_baseline
@@ -36,6 +37,7 @@ def paired_t_test(penalty_curr, penalty_baseline):
     t_value = (mean - 0) / (std / torch.sqrt(penalty_curr.size(0)))
     p_value = 1 - torch.distributions.t.cdf(t_value, penalty_curr.size(0) - 1)
 #%%
+@torch.no_grad()
 def get_reverse_mapping(predicted_mappings):
     device = predicted_mappings.device
     mask = predicted_mappings == -1
