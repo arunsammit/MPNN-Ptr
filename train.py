@@ -12,14 +12,15 @@ dataloader, distance_matrices = torch.load('data/data_single_64.pt',map_location
 max_graph_size = 64
 mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 10, hidden_dim=max_graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True)
 mpnn_ptr.to(device)
-mpnn_ptr.apply(init_weights)
-optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
+# mpnn_ptr.apply(init_weights)
+mpnn_ptr.load_state_dict(torch.load('models_data/model_pretrain_single_64_2.pt',map_location=device))
+optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.000072)
 # learning rate schedular
 lr_schedular = torch.optim.lr_scheduler.StepLR(optim, step_size=5000, gamma=0.96)
-num_repeats = 2000
+num_repeats = 4000
 penalty_baseline = None
 epoch_penalty = torch.zeros(len(dataloader))
-loss_list_pre = []
+loss_list_pre = torch.load('plots/loss_list_pre_2.pt')
 #%%
 for rep in range(num_repeats):
     epoch_penalty[:] = 0
@@ -62,6 +63,6 @@ ax.set_ylabel('Communication cost')
 
 fig.savefig('plots/loss_list_pre_2.png', dpi=300)
 
-# save the loss list
+#%% save the loss list
 torch.save(loss_list_pre, 'plots/loss_list_pre_2.pt')
 # %%

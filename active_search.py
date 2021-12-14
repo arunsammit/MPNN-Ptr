@@ -8,6 +8,7 @@ from utils.utils import communication_cost
 from torch import nn
 import matplotlib.pyplot as plt
 import sys
+from timeit import default_timer as timer
 #%%
 
 args_len = len(sys.argv)
@@ -41,6 +42,8 @@ data = next(iter(dataloader))
 loss_list = []
 num_epochs = int(sys.argv[2])
 count_not_decrease = 0
+# start measuring time
+start = timer()
 for epoch in range(num_epochs):
     num_samples = 1
     predicted_mappings, log_likelihood_sum = mpnn_ptr(data,num_samples)
@@ -71,8 +74,10 @@ for epoch in range(num_epochs):
         break    
     loss_list.append(penalty.mean().item())
     # lr_scheduler.step()
+# stop measuring time
+end = timer()
 torch.save(mpnn_ptr.state_dict(), f'./models_data/model_single_uniform_{graph_size}.pt')
-print('Best cost: {}'.format(best_cost))
+print(f'Best cost: {best_cost}, time taken: {end - start}')
 # plot loss vs epoch
 fig, ax = plt.subplots()  # Create a figure and an axes.
 ax.plot(loss_list)  # Plot some data on the axes.

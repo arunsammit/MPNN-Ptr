@@ -88,13 +88,14 @@ class Decoder(nn.Module):
 
 
 class PointerNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True):
+    def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, decoding_type = 'sampling'):
         super().__init__()
         self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
         self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)
         self.attn: Attention = Attention(hidden_dim, hidden_dim, logit_clipping)
         self.initial_decoder_input = nn.Parameter(torch.zeros(1, input_dim))
         self.device = device
+        self.decoding_type = decoding_type
 
     def preprocess(self, input, mask) -> Tuple[Tensor, Tensor]:
         lengths = mask.sum(dim=1, dtype=torch.long)
@@ -128,7 +129,12 @@ class PointerNet(nn.Module):
             # logits shape: (batch, seq_len)
             log_probs = F.log_softmax(logits, dim=1)
             # log_probs shape: (batch, seq_len)
-            selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
+            if self.decoding_type == 'sampling':
+                selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
+            elif self.decoding_type == 'greedy':
+                selected_indices = torch.argmax(log_probs, dim=1).long()
+            else:
+                raise ValueError('Decoding type should be either sampling or greedy')
             # selected_indices shape: (batch_size,)
             predicted_mappings[:, t] = selected_indices
             log_probs_list.append(log_probs)

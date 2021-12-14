@@ -19,8 +19,9 @@
             "request": "launch",
             "program": "${workspaceFolder}/dpso.py",
             "args": [
-                "./data/data_single_instance_64.pt",
-                "512"
+                "./data/data_single_instance_uniform_5.pt",
+                "2",
+                "random"
             ],
             "console": "integratedTerminal"
         },
