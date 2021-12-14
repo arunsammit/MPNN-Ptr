@@ -6,14 +6,19 @@ import torch_geometric
 
 # combine Mpnn and PointeNet
 class MpnnPtr(nn.Module):
-    def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True):
+    def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True, decoding_type='sampling'):
         # K is number of rounds of message passing
         super(MpnnPtr, self).__init__()
         self.mpnn = Mpnn(input_dim, embedding_dim, K)
         self.device = device
         self.logit_clipping = logit_clipping
-        self.ptr_net = PointerNet(embedding_dim, hidden_dim, n_layers, p_dropout, device, logit_clipping)
-
+        self.ptr_net = PointerNet(embedding_dim, hidden_dim, n_layers, p_dropout, device, logit_clipping, decoding_type)
+    @property
+    def decoding_type(self):
+        return self.ptr_net.decoding_type
+    @decoding_type.setter
+    def decoding_type(self, decoding_type):
+        self.ptr_net.decoding_type = decoding_type
     def forward(self, data, num_samples=1):
         # data is batch of graphs
         # pass data through Mpnn to get embeddings

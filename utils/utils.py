@@ -3,6 +3,8 @@ import torch
 import torch_geometric
 from torch_scatter import scatter
 from torch import nn
+from scipy import stats
+from math import sqrt
 #%%
 @torch.no_grad()
 def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, distance_matrix, predicted_mappings):
@@ -27,15 +29,19 @@ def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix
     baseline_each = scatter(comm_cost, batch[edge_index_repeated[0]], dim=0, dim_size=batch_size, reduce='mean')
     return baseline_each
 @torch.no_grad()
-def paired_t_test(penalty_curr, penalty_baseline):
+def paired_t_test(penalty_curr:torch.Tensor, penalty_baseline:torch.Tensor) -> int:
     # FIXME: complete paired t-test function
     # penalty_curr: [batch_size]
     # penalty_baseline: [batch_size]
-    diff:torch.Tensor = penalty_curr - penalty_baseline
-    mean = diff.mean()
-    std = diff.std(unbiased=True)
-    t_value = (mean - 0) / (std / torch.sqrt(penalty_curr.size(0)))
-    p_value = 1 - torch.distributions.t.cdf(t_value, penalty_curr.size(0) - 1)
+    diff = penalty_curr - penalty_baseline
+    mean = diff.mean().item()
+    # null hypothesis: mean = 0
+    # alternative hypothesis: mean < 0 
+    std = diff.std(unbiased=True).item()
+    t_value = (mean - 0) / (std / (sqrt(penalty_curr.size(0))))
+    # calculate p value using scipy
+    p_value = stats.t.cdf(t_value, penalty_curr.size(0) - 1)
+    return p_value, t_value, mean
 #%%
 @torch.no_grad()
 def get_reverse_mapping(predicted_mappings):
