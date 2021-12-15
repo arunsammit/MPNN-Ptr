@@ -9,7 +9,7 @@ from torch import nn
 import matplotlib.pyplot as plt
 import sys
 from torch_geometric.data import Data
-from utils.utils import paired_t_test
+from utils.baseline import baseline_model_update
 
 #%%
 # implement active search using a greedy rollout baseline instead of exponentially moving average baseline
@@ -60,23 +60,6 @@ loss_list = []
 steps = 100
 epoch_penalty = torch.zeros(len(dataloader))
 num_repeats = math.ceil(num_epochs / steps)
-@torch.no_grad()
-def baseline_model_update(data_batched, distance_matrix, mpnn_ptr, mpnn_ptr_baseline):
-    mpnn_ptr.eval()
-    mpnn_ptr.decoding_type = 'greedy'
-    predicted_mappings_current, _ = \
-            mpnn_ptr(data_batched,1)
-    mpnn_ptr.decoding_type ='sampling'
-    penalty_current = \
-            communication_cost(data_batched.edge_index, data_batched.edge_attr, data_batched.batch, data_batched.num_graphs, distance_matrix, predicted_mappings_current)
-    predicted_mappings_baseline, _ = \
-            mpnn_ptr_baseline(data_batched,1)
-    penalty_baseline = \
-            communication_cost(data_batched.edge_index, data_batched.edge_attr, data_batched.batch, data_batched.num_graphs, distance_matrix, predicted_mappings_baseline)
-    p_value, t_value, mean = paired_t_test(penalty_current, penalty_baseline)
-    print(f'p-value: {p_value}, t-value: {t_value}, mean: {mean}')
-    if(p_value < 0.05):
-        mpnn_ptr_baseline.load_state_dict(mpnn_ptr.state_dict())
 
 for rep in range(num_repeats):
     for step in range(steps):
@@ -94,6 +77,7 @@ for rep in range(num_repeats):
             best_cost_epoch = min(best_cost_epoch, penalty[arg_min_penalty].item())
             with torch.no_grad():
                 mpnn_ptr_baseline.eval()
+                # BUG: the below line is probably wrong
                 baselines, _ = mpnn_ptr_baseline(data,1)
             loss = torch.mean((penalty.detach() - baseline.detach()) * log_likelihood_sum)
             optim.zero_grad()

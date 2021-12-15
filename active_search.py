@@ -84,6 +84,6 @@ ax.plot(loss_list)  # Plot some data on the axes.
 ax.set_xlabel('number of epochs')  # Add an x-label to the axes.
 ax.set_ylabel('communication cost')  # Add a y-label to the axes.
 ax.set_title("communication cost v/s number of epochs")  # Add a title to the axes
-fig.savefig(f'./plots/loss_single_uniform_{graph_size}_2.png')  # Save the figure.
+fig.savefig(f'./plots/loss_single_uniform_{graph_size}_3.png')  # Save the figure.
 
 

@@ -1,7 +1,6 @@
 #%%
 from models.mpnn_ptr import MpnnPtr
-from utils.utils import communication_cost, init_weights
-from utils.baseline import calculate_baseline
+from utils.utils import communication_cost, calculate_baseline, init_weights
 import torch
 from torch import nn
 import matplotlib.pyplot as plt

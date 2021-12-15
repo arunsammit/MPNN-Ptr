@@ -3,8 +3,7 @@ import torch
 import torch_geometric
 from torch_scatter import scatter
 from torch import nn
-from scipy import stats
-from math import sqrt
+
 #%%
 @torch.no_grad()
 def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, distance_matrix, predicted_mappings):
@@ -16,32 +15,7 @@ def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, di
     comm_cost.squeeze_(-1)
     comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
     return comm_cost_each
-#%%
-@torch.no_grad()
-def calculate_baseline(edge_index, edge_attr, batch, batch_size, distance_matrix, samples):
-    # samples shape: [batch_size, num_samples, seq_len]
-    reverse_mappings = get_reverse_mapping(samples.view(-1, samples.size(-1)))
-    reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
-    edge_index_repeated = edge_index.repeat_interleave(samples.size(1), dim=1)
-    edge_attr_repeated = edge_attr.repeat_interleave(samples.size(1), dim=0)
-    costs = distance_matrix[reverse_mappings_flattened[edge_index_repeated[0]], reverse_mappings_flattened[edge_index_repeated[1]]].unsqueeze(-1)
-    comm_cost = costs * edge_attr_repeated
-    baseline_each = scatter(comm_cost, batch[edge_index_repeated[0]], dim=0, dim_size=batch_size, reduce='mean')
-    return baseline_each
-@torch.no_grad()
-def paired_t_test(penalty_curr:torch.Tensor, penalty_baseline:torch.Tensor) -> int:
-    # FIXME: complete paired t-test function
-    # penalty_curr: [batch_size]
-    # penalty_baseline: [batch_size]
-    diff = penalty_curr - penalty_baseline
-    mean = diff.mean().item()
-    # null hypothesis: mean = 0
-    # alternative hypothesis: mean < 0 
-    std = diff.std(unbiased=True).item()
-    t_value = (mean - 0) / (std / (sqrt(penalty_curr.size(0))))
-    # calculate p value using scipy
-    p_value = stats.t.cdf(t_value, penalty_curr.size(0) - 1)
-    return p_value, t_value, mean
+
 #%%
 @torch.no_grad()
 def get_reverse_mapping(predicted_mappings):
@@ -55,6 +29,7 @@ def get_reverse_mapping(predicted_mappings):
     indices.masked_fill_(mask, -1)
     reverse_mappings.scatter_(1, predicted_mappings, indices)
     return reverse_mappings
+#%%
 def init_weights(m):
     for name, param in m.named_parameters():
         nn.init.uniform_(param.data, -0.08, 0.08)

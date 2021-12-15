@@ -143,3 +143,5 @@ cython_debug/
 **/__pycache__/
 discarded/
 
+# pytorch generated data files
+data*.pt
