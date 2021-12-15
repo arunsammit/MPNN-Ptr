@@ -46,23 +46,18 @@ def generate_distance_matrix(n,m):
             D[i, j] = val
     return torch.from_numpy(D)
 
-
-def generate_graph_data_list(min_graph_size=10, max_graph_size=50, num_graphs=100) -> List[Data]:
-    if max_graph_size < min_graph_size:
-        raise ValueError("max_graph_size must be greater than min_graph_size")
+#%%
+def generate_graph_data_list(graph_size, num_graphs) -> List[Data]:
     rng = default_rng()
     datalist = []
-    graph_sizes = random.choices(range(min_graph_size, max_graph_size + 1, 1), k=num_graphs)
     for i in range(num_graphs):
-        G = nx.generators.random_graphs.fast_gnp_random_graph(graph_sizes[i], .3, directed=True)
+        G = nx.generators.random_graphs.fast_gnp_random_graph(graph_size, .3, directed=True)
         uniform = 1- rng.uniform(0, 1, len(G.edges))
         nx.set_edge_attributes(G, {e: {'weight': uniform[i]} for i, e in enumerate(G.edges)})
         edge_index = torch.tensor(list(G.edges), dtype=torch.long)
         x = torch.from_numpy(nx.to_numpy_array(G)).float()
-        x_padded = torch.cat([x, torch.zeros(x.shape[0], max_graph_size - x.shape[1])], dim=1)
         edge_attr = torch.from_numpy(uniform).float().unsqueeze(-1)
-        # print(edge_attr.shape)
-        data = Data(x=x_padded, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
+        data = Data(x=x, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
         datalist.append(data)
     return datalist
 # def normalize_graph_data(data:Data)->Data:
@@ -86,7 +81,12 @@ if __name__ == '__main__':
     # dataloader49_single, distance_matrices49_single = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
     # torch.save([dataloader49_single, distance_matrices49_single], 'data/data_single_64.pt')
     if len(sys.argv) < 2:
-        print('Usage: python3 datagenerate.py <single_instance/single/multi> <graph_size> <num_batches (not needed for single_instance)> <batch_size>')
+        print(
+        "Usage:\n" + \
+            "\tpython3 datagenerate.py single_instance <graph_size>\n" + \
+            "\tpython3 datagenerate.py single <graph_size> <num_graphs>\n" + \
+            "\tpython3 datagenerate.py multi <graph_sizes (multiple values with space)> <num_batches> <batch_size>"
+        )
         sys.exit(1)
     if sys.argv[1] == 'single_instance':
         graph_size = int(sys.argv[2])
@@ -95,10 +95,9 @@ if __name__ == '__main__':
         torch.save(single_graph, save_path)
     elif sys.argv[1] == 'single':
         graph_size = int(sys.argv[2])
-        num_batches = int(sys.argv[3])
-        batch_size = int(sys.argv[4])
-        dataloader, distance_matrices = generate_graph_data_loader_with_distance_matrix(np.array(num_batches * [graph_size]), batch_size, device, shuffle=True)
-        torch.save([dataloader, distance_matrices], 'data/data_single_{}.pt'.format(graph_size))
+        num_graphs = int(sys.argv[3])
+        datalist = generate_graph_data_list(graph_size, num_graphs)
+        torch.save(datalist, f'data/data_single_{graph_size}_{num_graphs}.pt')
     elif sys.argv[1] == 'multi':
         sizes_list = np.array(sys.argv[2:len(sys.argv)-2])
         num_batches = int(sys.argv[-2])
@@ -110,3 +109,5 @@ if __name__ == '__main__':
 
 
 
+
+# %%

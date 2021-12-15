@@ -116,8 +116,8 @@ class Dpso:
             bst_prtl = prtl[bstp_ids]
             bad_prtl = prtl[badp_ids]
             rand_loc = np.random.permutation(self.particle_size)
-            swap_limit_good = math.ceil(self.particle_size / 16)
-            swap_limit_bad = math.ceil(self.particle_size / 8)
+            swap_limit_good = math.ceil(self.particle_size / 24)
+            swap_limit_bad = math.ceil(self.particle_size / 12)
             lbest_loc = rand_loc[0:swap_limit_good // 2]  
             gbest_loc = rand_loc[swap_limit_good // 2:swap_limit_good]
             bad_loc1 = rand_loc[0:swap_limit_bad // 2]
