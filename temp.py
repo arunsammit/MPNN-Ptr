@@ -107,6 +107,53 @@ class PointerNet(nn.Module):
         batch_size = input.size(1)
         return input, mask
 
+    def forward(self, input: Tensor, mask, k:int=1):
+        # input shape: (seq_len, batch, input_dim)
+        # mask shape: (batch, seq_len)
+        input, mask = self.preprocess(input, mask)
+        batch_size = input.size(1)
+        seq_len = input.size(0)
+        # Tensor to store the predicted mapping
+        # predicted_mappings shape: (batch, seq_len)
+        predicted_mappings = torch.zeros(batch_size, seq_len, dtype=torch.int64).to(self.device)
+        encoder_outputs, (hidden, cell) = self.encoder(input, mask)
+        # first input should be a part of model learnable parameters
+        decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
+        # mask to be used while calculating attention weights
+        mask_decoding = mask.clone()
+        log_probs_list = []
+        for t in range(seq_len):
+            output, (hidden, cell) = self.decoder(decoder_input, hidden, cell)
+            logits = self.attn(output, encoder_outputs, mask_decoding)
+            # logits shape: (batch, seq_len)
+            log_probs = F.log_softmax(logits, dim=1)
+            # log_probs shape: (batch, seq_len)
+            if self.decoding_type == 'sampling':
+                selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
+            elif self.decoding_type == 'greedy':
+                selected_indices = torch.argmax(log_probs, dim=1).long()
+            else:
+                raise ValueError('Decoding type should be either sampling or greedy')
+            # selected_indices shape: (batch_size,)
+            predicted_mappings[:, t] = selected_indices
+            log_probs_list.append(log_probs)
+            # decoder_input shape: (batch, input_dim)
+            decoder_input = input[selected_indices, torch.arange(batch_size)]
+            # update the mask_decoding to remove the pointed inputs
+            mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
+        # calculate the log likelihoods
+        log_probs = torch.stack(log_probs_list, dim=1).to(self.device)
+        # log_probs shape: (batch, seq_len, seq_len)
+        log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
+        # log_likelihoods shape: (batch, seq_len)
+        # ignoring the probabilities of the padded values
+        log_likelihoods = log_likelihoods.masked_fill(mask == 0, 0)
+        # log_likelihoods shape: (batch,)
+        # assign -1 to the mappings corresponding to the padded values to denote that it is invalid
+        predicted_mappings = predicted_mappings.masked_fill(mask == 0, -1)
+        log_likelihoods_sum = log_likelihoods.sum(dim=1)
+        return predicted_mappings, log_likelihoods_sum
+
     def forward(self, input: Tensor, mask, num_samples=1):
         # sample n_samples mapping solutions for each sequence in the batch
         input, mask = self.preprocess(input, mask)
@@ -141,22 +188,16 @@ class PointerNet(nn.Module):
                 encoder_outputs = encoder_outputs.repeat_interleave(num_samples, dim=1)
             else:
                 selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
-            predicted_mappings[:, t] = selected_indices
             log_probs_list.append(log_probs)
-            # decoder_input shape: (batch, input_dim)
+            predicted_mappings[:, t] = selected_indices
+            mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
             decoder_input = input.repeat_interleave(num_samples, dim=1)[selected_indices,
                                                                       torch.arange(batch_size * num_samples)]
-            # update the mask_decoding to remove the pointed inputs
-            mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
-        # calculate the log likelihoods
         log_probs = torch.stack(log_probs_list, dim=1).to(self.device)
         # log_probs shape: (batch * num_samples, seq_len, seq_len)
         log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
         # log_likelihoods shape: (batch * num_samples, seq_len)
-        # ignoring the probabilities of the padded values
-        log_likelihoods.masked_fill_(mask == 0, 0)
-        # assign -1 to the mappings corresponding to the padded values to denote that it is invalid
-        predicted_mappings.masked_fill_(mask.repeat_interleave(num_samples, dim=0) == 0, -1)
+        predicted_mappings = predicted_mappings.masked_fill(mask.repeat_interleave(num_samples, dim=0) == 0, -1)
         # # reshape the predicted_mappings to (batch_size, seq_len, n_samples)
         # predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len)
         log_likelihoods_sum = log_likelihoods.sum(dim=1)

@@ -47,7 +47,7 @@ def generate_distance_matrix(n,m):
     return torch.from_numpy(D)
 
 #%%
-def generate_graph_data_list(graph_size, num_graphs) -> List[Data]:
+def generate_graph_data_list(graph_size: int, num_graphs: int) -> List[Data]:
     rng = default_rng()
     datalist = []
     for i in range(num_graphs):

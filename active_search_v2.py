@@ -57,7 +57,7 @@ baseline = torch.tensor(0.0)
 # data = next(iter(dataloader))
 num_epochs = 5000
 loss_list = []
-steps = 100
+steps = 10
 epoch_penalty = torch.zeros(len(dataloader))
 num_repeats = math.ceil(num_epochs / steps)
 
@@ -77,9 +77,9 @@ for rep in range(num_repeats):
             best_cost_epoch = min(best_cost_epoch, penalty[arg_min_penalty].item())
             with torch.no_grad():
                 mpnn_ptr_baseline.eval()
-                # BUG: the below line is probably wrong
-                baselines, _ = mpnn_ptr_baseline(data,1)
-            loss = torch.mean((penalty.detach() - baseline.detach()) * log_likelihood_sum)
+                baselines_mappings, _ = mpnn_ptr_baseline(data,1)
+                penalty_baseline = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix,baselines_mappings)
+            loss = torch.mean((penalty.detach() - penalty_baseline.detach()) * log_likelihood_sum)
             optim.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
