@@ -23,16 +23,11 @@ class MpnnPtr(nn.Module):
         # data is batch of graphs
         # pass data through Mpnn to get embeddings
         embeddings = self.mpnn(data.x, data.edge_index, data.edge_attr, data.batch)
-        # convert the embeddings to pack_padded_sequence
         batched_embeddings, mask = torch_geometric.utils.to_dense_batch(embeddings, data.batch)
         # batched_embeddings shape: (batch_size, max_num_nodes, embedding_dim)
         # pass embeddings and mask through PointerNet to get pointer
-        predicted_mappings, log_likelihoods_sum = self.ptr_net(batched_embeddings.permute(1, 0, 2), mask)
-        if num_samples == 1:
-            return predicted_mappings, log_likelihoods_sum
-        else:
-            samples = self.ptr_net.sample_multiple_mappings(batched_embeddings.permute(1,0,2),mask,num_samples)
-            return samples, predicted_mappings, log_likelihoods_sum
+        predicted_mappings, log_likelihoods_sum = self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
+        return predicted_mappings, log_likelihoods_sum
 
 if __name__ == '__main__':
     from utils.datagenerate import generate_graph_data_list

@@ -6,7 +6,8 @@ from torch import nn
 
 #%%
 @torch.no_grad()
-def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, distance_matrix, predicted_mappings):
+def communication_cost(edge_index, edge_attr, batch, distance_matrix, predicted_mappings):
+    batch_size = predicted_mappings.size(0) 
     reverse_mappings = get_reverse_mapping(predicted_mappings)
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
     costs = distance_matrix[reverse_mappings_flattened[edge_index[0]], reverse_mappings_flattened[edge_index[1]]]\
@@ -16,13 +17,29 @@ def communication_cost(edge_index:torch.Tensor, edge_attr, batch, batch_size, di
     comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
     return comm_cost_each
 
+@torch.no_grad()
+def communication_cost_multiple_samples(edge_index:torch.Tensor, edge_attr, batch, distance_matrix, predicted_mappings, num_samples):
+    # TODO: This is not correct.
+    graph_size = predicted_mappings.size(1)
+    batch_size = predicted_mappings.size(0) // num_samples
+    reverse_mappings = get_reverse_mapping(predicted_mappings)
+    reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
+    edge_index_repeated = edge_index.repeat(1, num_samples)
+    edge_index_adjust = torch.arange(0, reverse_mappings_flattened.size(0), batch_size * graph_size) \
+        .repeat_interleave(edge_index.size(1)).expand(2,-1).to(edge_index.device)
+    edge_index_adjusted = edge_index_repeated + edge_index_adjust
+    edge_attr_repeated = edge_attr.repeat(num_samples, 1)
+    costs = distance_matrix[reverse_mappings_flattened[edge_index_adjusted[0]], reverse_mappings_flattened[edge_index_adjusted[1]]].unsqueeze(-1)
+    comm_cost = costs * edge_attr_repeated
+    comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
+    return comm_cost.squeeze(-1)
 #%%
 @torch.no_grad()
 def get_reverse_mapping(predicted_mappings):
     device = predicted_mappings.device
     mask = predicted_mappings == -1
     reverse_mappings = torch.zeros_like(predicted_mappings)
-    indices = torch.arange(predicted_mappings.size(1)).expand(predicted_mappings.size(0), predicted_mappings.size(1))\
+    indices = torch.arange(predicted_mappings.size(1)).expand(predicted_mappings.size(0), -1)\
         .clone().to(device)
     # since -1 is not a valid index and predicted mappings are used as indices in scatter function, we need to replace -1 with the valid indices
     predicted_mappings[mask] = indices[mask]

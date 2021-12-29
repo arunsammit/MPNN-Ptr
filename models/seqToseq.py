@@ -128,13 +128,14 @@ class PointerNet(nn.Module):
             log_probs = F.log_softmax(logits, dim=1)
             # log_probs shape: (batch * num_samples, seq_len)
             if t == 0:
-                # selected_indices shape: (batch * num_samples,)
                 if self.decoding_type == 'sampling':
+                # selected_indices shape: (batch * num_samples,)
                     selected_indices = torch.multinomial(log_probs.exp(), num_samples, replacement=True).long().view(-1)
                 elif self.decoding_type == 'greedy':
                     if num_samples != 1:
                         raise ValueError('Greedy decoding can only be used with one sample')
-                    selected_indices = torch.argmax(log_probs, dim=1).long().view(-1)
+                    selected_indices = torch.argmax(log_probs, dim=1).long()
+                log_probs = log_probs.repeat_interleave(num_samples, dim=0)
                 mask_decoding = mask_decoding.repeat_interleave(num_samples, dim=0)
                 hidden = hidden.repeat_interleave(num_samples, dim=1)
                 cell = cell.repeat_interleave(num_samples, dim=1)
@@ -154,12 +155,14 @@ class PointerNet(nn.Module):
         log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
         # log_likelihoods shape: (batch * num_samples, seq_len)
         # ignoring the probabilities of the padded values
-        log_likelihoods.masked_fill_(mask == 0, 0)
+        log_likelihoods = log_likelihoods.masked_fill(mask.repeat_interleave(num_samples, dim=0) == 0, 0)
         # assign -1 to the mappings corresponding to the padded values to denote that it is invalid
-        predicted_mappings.masked_fill_(mask.repeat_interleave(num_samples, dim=0) == 0, -1)
+        predicted_mappings = predicted_mappings.masked_fill(mask.repeat_interleave(num_samples, dim=0) == 0, -1)
         # # reshape the predicted_mappings to (batch_size, seq_len, n_samples)
         # predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len)
         log_likelihoods_sum = log_likelihoods.sum(dim=1)
+        predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len).transpose(0, 1).reshape(-1,seq_len)
+        log_likelihoods_sum = log_likelihoods_sum.view(batch_size, num_samples).transpose(0, 1).reshape(-1)
         return predicted_mappings, log_likelihoods_sum
 
 if __name__ == '__main__':
@@ -175,8 +178,6 @@ if __name__ == '__main__':
     input = torch.randn(max_seq_len, batch_size, input_dim).to(device)
     mask = torch.ones(batch_size, max_seq_len).to(device)
     # mask[-1, :] = 1
-    predicted_mappings, log_likelihoods_sum = model(input, mask)
-    samples = model.sample_multiple_mappings(input, mask, n_samples=2)
-    print(samples)
+    predicted_mappings, log_likelihoods_sum = model(input, mask, num_samples=4)
     print(predicted_mappings)
     print(log_likelihoods_sum)

@@ -48,7 +48,7 @@ for epoch in range(num_epochs):
     for i, data in enumerate(dataloader):
         mpnn_ptr.train()
         predicted_mappings, log_likelihoods_sum = mpnn_ptr(data, 1)
-        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, predicted_mappings)
+        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
         epoch_penalty[i] = penalty.mean()
         if not ran_once:
             if penalty_baseline is None:
@@ -58,7 +58,7 @@ for epoch in range(num_epochs):
         else:
             with torch.no_grad():
                 baseline_mappings, _ = mpnn_ptr_baseline(data, 1)
-                penalty_baseline = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, baseline_mappings)
+                penalty_baseline = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, baseline_mappings)
         loss = torch.mean((penalty.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
         optim.zero_grad()
         loss.backward()
