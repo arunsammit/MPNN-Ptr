@@ -5,10 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "Python: Module Baseline",
             "type": "python",
             "request": "launch",
             "module": "utils.baseline"
+        },
+        {
+            "name": "Python: Module Utils",
+            "type": "python",
+            "request": "launch",
+            "module": "utils.utils"
         },
         {
             "name": "Python: Current File",
@@ -42,6 +48,17 @@
                 "random"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "active_search",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/active_search.py",
+            "args": [
+                "./data/data_single_instance_uniform_64.pt",
+                "128"
+            ],
+            "console": "integratedTerminal",
         },
         {
             "name": "Python: Current File",

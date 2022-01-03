@@ -4,7 +4,7 @@ import math
 import torch
 from torch_geometric.loader import DataLoader
 from models.mpnn_ptr import MpnnPtr
-from utils.utils import communication_cost
+from utils.utils import  communication_cost_multiple_samples
 from torch import nn
 import matplotlib.pyplot as plt
 import sys
@@ -20,11 +20,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data = torch.load(sys.argv[1])
 graph_size = data.num_nodes
 if args_len>3:
-    batch_size = int(sys.argv[3])
+    num_samples = int(sys.argv[3])
 else:
-    batch_size = 128
-datalist = [data for _ in range(batch_size)]
-dataloader = DataLoader(datalist, batch_size=batch_size)
+    num_samples = 128
+datalist = [data]
+dataloader = DataLoader(datalist, batch_size=1)
 n = math.ceil(math.sqrt(graph_size))
 m = math.ceil(graph_size / n)
 distance_matrix = generate_distance_matrix(n,m).to(device)
@@ -45,11 +45,9 @@ count_not_decrease = 0
 # start measuring time
 start = timer()
 for epoch in range(num_epochs):
-    num_samples = 1
-    predicted_mappings, log_likelihood_sum = mpnn_ptr(data,num_samples)
-    predicted_mappings.detach_()
-    penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix,
-                                    predicted_mappings)
+    predicted_mappings, log_likelihood_sum = mpnn_ptr(data, num_samples)
+    penalty = communication_cost_multiple_samples(data.edge_index, 
+        data.edge_attr, data.batch, distance_matrix, predicted_mappings, num_samples)
     min_penalty = torch.argmin(penalty)
     if penalty[min_penalty] < best_cost:
         best_cost = penalty[min_penalty]
@@ -57,7 +55,8 @@ for epoch in range(num_epochs):
     if epoch == 0:
         baseline = penalty.mean()
     else:
-        baseline = 0.99 * baseline + 0.01 * penalty.mean()
+        baseline = 0.9 * baseline + 0.1 * penalty.mean()
+    baseline = penalty.mean()
     loss = torch.mean((penalty.detach() - baseline.detach())*log_likelihood_sum)
     optim.zero_grad()
     loss.backward()
@@ -71,6 +70,7 @@ for epoch in range(num_epochs):
     else:
         count_not_decrease = 0
     if count_not_decrease > 20000:
+        print('Early stopping at epoch {}'.format(epoch))
         break    
     loss_list.append(penalty.mean().item())
     # lr_scheduler.step()

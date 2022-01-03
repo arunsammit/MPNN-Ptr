@@ -12,11 +12,12 @@ def calculate_baseline(edge_index, edge_attr, batch, distance_matrix, samples, n
     # convert from repeat_interleave to repeat
     graph_size = samples.size(1)
     batch_size = samples.size(0) // num_samples
+    device = edge_index.device
     reverse_mappings = get_reverse_mapping(samples)
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
     edge_index_repeated = edge_index.repeat(1, num_samples)
-    edge_index_adjust = torch.arange(0, reverse_mappings_flattened.size(0), batch_size * graph_size) \
-        .repeat_interleave(edge_index.size(1)).expand(2,-1).to(edge_index.device)
+    edge_index_adjust = \
+        torch.arange(num_samples, device = device).repeat_interleave(edge_index.size(1)) * graph_size * batch_size
     edge_index_adjusted = edge_index_repeated + edge_index_adjust
     edge_attr_repeated = edge_attr.repeat(num_samples, 1)
     costs = distance_matrix[reverse_mappings_flattened[edge_index_adjusted[0]], reverse_mappings_flattened[edge_index_adjusted[1]]].unsqueeze(-1)

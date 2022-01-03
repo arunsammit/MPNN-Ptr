@@ -2,7 +2,7 @@
 from torch_geometric.loader.dataloader import DataLoader
 from models.mpnn_ptr import MpnnPtr
 from utils.baseline import calculate_baseline
-from utils.utils import communication_cost, init_weights
+from utils.utils import communication_cost_multiple_samples , init_weights
 from utils.datagenerate import generate_distance_matrix
 import torch
 from torch import nn
@@ -35,20 +35,15 @@ num_epochs = 200
 penalty_baseline = None
 epoch_penalty = torch.zeros(len(dataloader))
 loss_list_pre = []
-num_samples = 9
+num_samples = 8
 #%%
 for epoch in range(num_epochs):
     for i, data in enumerate(dataloader):
         mpnn_ptr.train()
-        samples, log_likelihoods_sum = mpnn_ptr(data, num_samples)
-        # select the first sample for each graph in the batch
-        predicted_mappings = samples[:data.num_graphs]
-        log_likelihoods_sum = log_likelihoods_sum[:data.num_graphs]
-        # remaining samples for baseline calculation
-        samples = samples[data.num_graphs:]
-        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
+        predicted_mappings, log_likelihoods_sum = mpnn_ptr(data, num_samples)
+        penalty = communication_cost_multiple_samples(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings, num_samples)
         epoch_penalty[i] = penalty.mean()
-        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, samples, num_samples - 1)
+        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings, num_samples).repeat(num_samples)
         loss = torch.mean((penalty.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
         optim.zero_grad()
         loss.backward()
@@ -60,7 +55,7 @@ for epoch in range(num_epochs):
     print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, num_epochs, batch_loss))
 #%%
 # save the model
-torch.save(mpnn_ptr.state_dict(), 'models_data/model_pretrain_single_64_simple.pt')
+torch.save(mpnn_ptr.state_dict(), 'models_data/model_pretrain_single_64_sr.pt')
 
 #%%
 # plot loss_list_pre
@@ -73,5 +68,5 @@ ax.set_ylabel('Communication cost')
 fig.savefig('plots/loss_list_pre_simple.png', dpi=300)
 
 #%% save the loss list
-torch.save(loss_list_pre, 'plots/loss_list_pre_simple.pt')
+torch.save(loss_list_pre, 'plots/loss_list_pre_sr.pt')
 # %%
