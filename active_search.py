@@ -56,7 +56,6 @@ for epoch in range(num_epochs):
         baseline = penalty.mean()
     else:
         baseline = 0.9 * baseline + 0.1 * penalty.mean()
-    baseline = penalty.mean()
     loss = torch.mean((penalty.detach() - baseline.detach())*log_likelihood_sum)
     optim.zero_grad()
     loss.backward()
