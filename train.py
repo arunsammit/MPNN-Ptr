@@ -1,3 +1,4 @@
+# for training the model with core graphs of all sizes
 #%%
 from models.mpnn_ptr import MpnnPtr
 from utils.utils import communication_cost, init_weights

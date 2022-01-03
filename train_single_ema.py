@@ -1,35 +1,47 @@
 #%%
+from torch_geometric.loader.dataloader import DataLoader
 from models.mpnn_ptr import MpnnPtr
-from utils.utils import communication_cost, calculate_baseline, init_weights
+from utils.utils import communication_cost, init_weights
+from utils.datagenerate import generate_distance_matrix
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
+import math
 
 #%%
-
+# load data and generate distance matrix
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-dataloader, distance_matrices = torch.load('data/data_single_64.pt',map_location=device)
-max_graph_size = 64
-mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 10, hidden_dim=max_graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True)
+data_path = 'data/data_single_64_2000.pt'
+datalist = torch.load(data_path, map_location=device)
+graph_size = datalist[0].num_nodes
+n = math.ceil(math.sqrt(graph_size))
+m = math.ceil(graph_size/n)
+distance_matrix = generate_distance_matrix(n,m).to(device)
+#%%
+# create DataLoader
+batch_size = 128
+dataloader = DataLoader(datalist, batch_size, shuffle=True)
+#%%
+# initialize the models
+mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True)
 mpnn_ptr.to(device)
-# mpnn_ptr.apply(init_weights)
-mpnn_ptr.load_state_dict(torch.load('models_data/model_pretrain_single_64_2.pt',map_location=device))
+mpnn_ptr.apply(init_weights)
+# mpnn_ptr.load_state_dict(torch.load('models_data/model_pretrain_single_64_2.pt',map_location=device))
+#%%
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=0.0001)
 # learning rate schedular
 lr_schedular = torch.optim.lr_scheduler.StepLR(optim, step_size=5000, gamma=0.96)
-num_repeats = 4000
+num_epochs = 200
 penalty_baseline = None
 epoch_penalty = torch.zeros(len(dataloader))
-loss_list_pre = torch.load('plots/loss_list_pre_2.pt')
+loss_list_pre = []
+# loss_list_pre = torch.load('plots/loss_list_pre_2.pt')
 #%%
-for rep in range(num_repeats):
+for epoch in range(num_epochs):
     epoch_penalty[:] = 0
-    for i, (data, distance_matrix) in enumerate(zip(dataloader, distance_matrices)):
-        num_samples = 8
+    for i, data in enumerate(dataloader):
         mpnn_ptr.train()
-        # samples, predicted_mappings, log_likelihoods_sum = mpnn_ptr(data, num_samples)
         predicted_mappings, log_likelihoods_sum = mpnn_ptr(data, 1)
-        # samples shape: (batch_size, num_samples, max_graph_size_in_batch)
         # predicted_mappings shape: (batch_size, max_graph_size_in_batch)
         # log_likelihoods_sum shape: (batch_size,)
         penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, data.num_graphs, distance_matrix, predicted_mappings)
@@ -47,8 +59,8 @@ for rep in range(num_repeats):
         lr_schedular.step()
     batch_loss = epoch_penalty.mean().item()
     loss_list_pre.append(batch_loss)
-    if rep % 10 == 0:
-        print('Epoch: {}/{}, Loss: {}'.format(rep + 1, num_repeats, batch_loss))
+    if epoch % 10 == 0:
+        print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, num_epochs, batch_loss))
 #%%
 # save the model
 torch.save(mpnn_ptr.state_dict(), 'models_data/model_pretrain_single_64_2.pt')
@@ -59,9 +71,7 @@ fig, ax = plt.subplots()
 ax.plot(loss_list_pre)
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Communication cost')
-# save figure
-
-fig.savefig('plots/loss_list_pre_2.png', dpi=300)
+fig.savefig(f'plots/loss_list_pre_ema_{"".join(data_path.split("_")[1:3])}.png', dpi=300)
 
 #%% save the loss list
 torch.save(loss_list_pre, 'plots/loss_list_pre_2.pt')
