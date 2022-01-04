@@ -91,7 +91,7 @@ if __name__ == '__main__':
     if sys.argv[1] == 'single_instance':
         graph_size = int(sys.argv[2])
         save_path = 'data/data_single_instance_uniform_{}.pt'.format(graph_size)
-        single_graph = generate_graph_data_list(graph_size, graph_size, 1)[0].to(device)
+        single_graph = generate_graph_data_list(graph_size, 1)[0].to(device)
         torch.save(single_graph, save_path)
     elif sys.argv[1] == 'single':
         graph_size = int(sys.argv[2])
