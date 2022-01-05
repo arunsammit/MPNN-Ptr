@@ -62,26 +62,30 @@ class Dpso:
     def comm_cost(self, particle):
         return communication_cost_multiple_samples(self.data.edge_index,self.data.edge_attr,self.data.batch, self.distance_matrix, torch.from_numpy(particle), particle.shape[0]).detach().numpy()
     def prtl_init(self, num_particles):
-        print(num_particles)
         particle = np.zeros((num_particles, self.particle_size), dtype=np.int64)
         rand_permute2D(particle)
         return particle
     def prtl_init_model(self, num_particles):
         # load model
         # TODO: generate half population from model and half randomly
+        num_sampled_particles = int(num_particles * .8)
+        num_random_particles = num_particles - num_sampled_particles
         mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0.1, device=self.device, logit_clipping=True)
         if self.model_path is None:
             raise ValueError('model_path is None')
         mpnn_ptr.load_state_dict(torch.load(self.model_path))
         mpnn_ptr.eval()
-        print(num_particles)
         with torch.no_grad():
             # generate initial population
-            particle_first_half, _ = mpnn_ptr(self.data, num_particles // 2)
-        particle_first_half = particle_first_half.detach().numpy()
-        particle_second_half = self.prtl_init(num_particles - num_particles//2)
+            particle_sampled, _ = mpnn_ptr(self.data, 100000)
+        particle_sampled = np.unique(particle_sampled.detach().numpy(),axis=0)
+        particle_sampled_fit = self.comm_cost(particle_sampled)
+        indices = particle_sampled_fit.argpartition(num_sampled_particles)[:num_sampled_particles]
+        particle_first_half = particle_sampled[indices]
+        # np.set_printoptions(threshold=sys.maxsize)
+        # print(f'{np.unique(particle_first_half,axis=0)}')
+        particle_second_half = self.prtl_init(num_random_particles)
         particle = np.concatenate((particle_first_half, particle_second_half), axis=0)
-        prtl_fitness = self.comm_cost(particle)
         return particle
     def global_best(self, particle, prtl_fitness):
         min_id = np.argmin(prtl_fitness)
@@ -144,8 +148,8 @@ class Dpso:
                 print(f'iteration {j}: gbest fitness {gbfit}')
             if (gb_fits[-1] <= gbfit):
                 check += 1
-                if (check >= 200):
-                    print(f'global best not improved for {check} generations \n exit')
+                if (check >= 500):
+                    print(f'global best not improved for {check} generations \nexit')
                     break
             else:
                 check = 0
