@@ -17,7 +17,7 @@ def communication_cost(edge_index, edge_attr, batch, distance_matrix, predicted_
     return comm_cost_each
 
 @torch.no_grad()
-def communication_cost_multiple_samples(edge_index:torch.Tensor, edge_attr, batch, distance_matrix, predicted_mappings, num_samples):
+def communication_cost_multiple_samples(edge_index:torch.Tensor, edge_attr, batch, distance_matrix, predicted_mappings, num_samples, calculate_baseline = False):
     graph_size = predicted_mappings.size(1)
     batch_size = predicted_mappings.size(0) // num_samples
     device = edge_index.device
@@ -34,8 +34,13 @@ def communication_cost_multiple_samples(edge_index:torch.Tensor, edge_attr, batc
     batch_adjust = torch.arange(num_samples, device = device).repeat_interleave(batch.size(0)) * batch_size
     batch_adjusted = batch_repeated + batch_adjust
     comm_cost_each = \
-        scatter(comm_cost, batch_adjusted[edge_index_adjusted[0]], dim=0, dim_size = num_samples * batch_size, reduce='sum')
-    return comm_cost_each.squeeze(-1)
+        scatter(comm_cost, batch_adjusted[edge_index_adjusted[0]], dim=0, dim_size = num_samples * batch_size, reduce='sum').squeeze(-1)
+    if calculate_baseline:
+        indices = torch.arange(batch_size, device = device).repeat(num_samples)
+        baseline = scatter(comm_cost_each, indices, dim=0, dim_size = batch_size, reduce='sum') / num_samples
+        return comm_cost_each, baseline
+    else:
+        return comm_cost_each
 #%%
 @torch.no_grad()
 def get_reverse_mapping(predicted_mappings):

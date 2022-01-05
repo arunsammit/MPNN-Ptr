@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 import math
-from utils.utils import communication_cost
+from utils.utils import communication_cost_multiple_samples
 from utils.datagenerate import generate_distance_matrix
 from torch_geometric.loader import DataLoader
 from numba import njit
@@ -48,9 +48,9 @@ class Dpso:
         graph_size = single_graph_data.num_nodes
         n = math.ceil(math.sqrt(graph_size))
         m = math.ceil(graph_size/n)
-        datalist = [single_graph_data for _ in range(num_particles)]
+        datalist = [single_graph_data]
         # just for using communication_cost function
-        dataloader = DataLoader(datalist, batch_size=num_particles)
+        dataloader = DataLoader(datalist, batch_size=1)
         self.data = next(iter(dataloader))
         self.distance_matrix = generate_distance_matrix(n,m).to(device)
         self.max_iterations = max_iterations
@@ -60,12 +60,12 @@ class Dpso:
         self.model_path = model_path
         self.device = device
     def comm_cost(self, particle):
-        return communication_cost(self.data.edge_index,self.data.edge_attr,self.data.batch, self.num_particles, self.distance_matrix, torch.from_numpy(particle)).detach().numpy()
+        return communication_cost_multiple_samples(self.data.edge_index,self.data.edge_attr,self.data.batch, self.distance_matrix, torch.from_numpy(particle), particle.shape[0]).detach().numpy()
     def prtl_init(self, num_particles):
+        print(num_particles)
         particle = np.zeros((num_particles, self.particle_size), dtype=np.int64)
         rand_permute2D(particle)
-        prtl_fitness = self.comm_cost(particle)
-        return particle, prtl_fitness
+        return particle
     def prtl_init_model(self, num_particles):
         # load model
         # TODO: generate half population from model and half randomly
@@ -74,14 +74,15 @@ class Dpso:
             raise ValueError('model_path is None')
         mpnn_ptr.load_state_dict(torch.load(self.model_path))
         mpnn_ptr.eval()
+        print(num_particles)
         with torch.no_grad():
             # generate initial population
-            particle_first_half, _ = mpnn_ptr(self.data, 1)
-        particle_first_half = particle_first_half.detach().numpy()[:num_particles//2]
+            particle_first_half, _ = mpnn_ptr(self.data, num_particles // 2)
+        particle_first_half = particle_first_half.detach().numpy()
         particle_second_half = self.prtl_init(num_particles - num_particles//2)
         particle = np.concatenate((particle_first_half, particle_second_half), axis=0)
         prtl_fitness = self.comm_cost(particle)
-        return particle, prtl_fitness
+        return particle
     def global_best(self, particle, prtl_fitness):
         min_id = np.argmin(prtl_fitness)
         # print(prtl_fitness)
@@ -101,11 +102,12 @@ class Dpso:
     
     def run(self):
         if self.prtl_init_method == "random":
-            prtl, prtl_fit = self.prtl_init(self.num_particles)
+            prtl = self.prtl_init(self.num_particles)
         elif self.prtl_init_method == "model":
-            prtl, prtl_fit = self.prtl_init_model(self.num_particles)
+            prtl = self.prtl_init_model(self.num_particles)
         else:
             raise ValueError(f'{self.prtl_init_method} is not supported for particle initialization')
+        prtl_fit = self.comm_cost(prtl)
         lcl_bst_prtl = np.copy(prtl)
         lcl_bst_fit = np.copy(prtl_fit)
         gbest, gbfit = self.global_best(prtl, prtl_fit)
