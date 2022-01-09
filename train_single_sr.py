@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import math
 from datetime import datetime
 import argparse
+from pathlib import Path
 
 #%%
 # if len(sys.argv) < 3:
@@ -77,6 +78,7 @@ for epoch in range(args.epochs):
 #%%
 # save the model
 datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
+Path('models_data').mkdir(parents=True, exist_ok=True)
 torch.save(mpnn_ptr.state_dict(), f'models_data/model_pretrain_sr_{graph_size}_{datetime_suffix}.pt')
 
 #%%
@@ -86,7 +88,7 @@ ax.plot(loss_list_pre)
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Communication cost')
 # save figure
-
+Path('plots').mkdir(parents=True, exist_ok=True)
 fig.savefig(f'plots/loss_list_pre_sr_{graph_size}_{datetime_suffix}.png', dpi=300)
 
 #%% save the loss list
