@@ -6,54 +6,69 @@ from utils.utils import communication_cost_multiple_samples
 from utils.datagenerate import generate_distance_matrix
 from torch_geometric.loader import DataLoader
 from numba import njit
-import sys
 from models.mpnn_ptr import MpnnPtr
 from timeit import default_timer as timer
 import random
+import argparse
+import sys
 #%%
-@njit
-def calc_swap_seq(curr_prtl, trns_to_prtl):
-    """
-    Calculate the swap sequence to transform curr_prtl to trns_to_prtl 
-    """
-    # copy curr_prtl
-    curr_prtl_cpy = np.copy(curr_prtl)
-    seq = np.zeros((len(curr_prtl-1),), dtype=np.int32 ) 
-    for i in range(curr_prtl_cpy.shape[0] -1):
-        item = trns_to_prtl[i]
-        index = 0
-        for j in range(curr_prtl_cpy.shape[0]):
-            if curr_prtl_cpy[j] == item:
-                index = j
-                break
-        seq[i] = index
-        curr_prtl_cpy[i], curr_prtl_cpy[index] = curr_prtl_cpy[index], curr_prtl_cpy[i]  
-    return seq
 @njit
 def rand_permute2D(particle):
     for i in range(particle.shape[0]):
         particle[i] = np.random.permutation(particle.shape[1])
         # print(particle[i])
 @njit
-def apply_swap_seq(particle, seq, p=1):
-    for i in range(seq.size):
-        if random.random() < p:
-            particle[seq[i]], particle[i] = particle[i], particle[seq[i]]
-
+def crossover(prtls):
+    """
+    Crossover between two parents to generate two children
+    """
+    childs = np.zeros((prtls.shape[0], prtls.shape[1]), dtype=np.int64)
+    partner_idxs = np.random.permutation(prtls.shape[0]//2) + prtls.shape[0]//2
+    for i in range(prtls.shape[0]//2):
+        # randomly choose a partner
+        partner_idx = partner_idxs[i]
+        # randomly choose a cut point
+        cut_point = random.randint(1, prtls.shape[1] - 1)
+        childs[2*i, :cut_point] = prtls[i, :cut_point]
+        childs[2*i, cut_point:] = prtls[partner_idx, cut_point:]
+        childs[2*i+1, :cut_point] = prtls[partner_idx, :cut_point]
+        childs[2*i+1, cut_point:] = prtls[i, cut_point:]
+    # remove the dublicate genes
+    for i in range(childs.shape[0]):
+        gene_seen = np.zeros((childs.shape[1],), dtype=np.int64)
+        for j in range(childs.shape[1]):
+            curr_gene = childs[i, j]
+            if gene_seen[curr_gene] == 1:
+                childs[i, j] = -1
+            gene_seen[curr_gene] = 1
+    # assign the missing genes until all the values from 0 to n-1 are present in the child
+    for i in range(childs.shape[0]):
+        gene_present = np.zeros((childs.shape[1],), dtype=np.int64)
+        for j in range(childs.shape[1]):
+            if childs[i, j] != -1:
+                gene_present[childs[i, j]] = 1
+        genes_absent = np.flatnonzero(gene_present == 0)
+        # randomly shuffle genes_not_seen
+        np.random.shuffle(genes_absent)
+        k = 0
+        for j in range(childs.shape[1]):
+            if childs[i, j] == -1:
+                childs[i, j] = genes_absent[k]
+                k += 1
+    return childs
 @njit
-def evolve_particles(prtls, lcl_bst_prtl, gbest):
+def mutation(prtls):
     """
-    Evolves particles using lcl_locs for lcl_bst_prtl and gbest_locs for gbest
+    Mutate the particles by swapping the contents of two geners creating new individuals
     """
+    childs = np.copy(prtls)
     for i in range(prtls.shape[0]):
-        curr_prtl = prtls[i]
-        curr_lcl_bst_prtl = lcl_bst_prtl[i]
-        seq_lcl = calc_swap_seq(curr_prtl, curr_lcl_bst_prtl)
-        seq_gbl = calc_swap_seq(curr_prtl, gbest)
-        apply_swap_seq(prtls[i], seq_lcl, .5)
-        apply_swap_seq(prtls[i], seq_gbl, .5)        
+        # randomly choose two locations in the particles to perform swapping
+        locs = np.random.randint(0, prtls.shape[1], size=2)
+        childs[i, locs[0]], childs[i, locs[1]] = childs[i, locs[1]], childs[i, locs[0]]
+    return childs
 #%%
-class Dpso:
+class GA:
     def __init__(self, dataset_path, num_particles,\
         max_iterations, prtl_init_method="random", model_path=None):
         device = torch.device("cpu")
@@ -78,6 +93,13 @@ class Dpso:
         particle = np.zeros((num_particles, self.particle_size), dtype=np.int64)
         rand_permute2D(particle)
         return particle
+    def global_best(self, particle, prtl_fitness):
+        min_id = np.argmin(prtl_fitness)
+        # print(prtl_fitness)
+        # print(min_id)
+        gbest = particle[min_id]
+        gbest_fit = prtl_fitness[min_id]
+        return gbest, gbest_fit
     def prtl_init_model(self, num_particles):
         # load model
         # TODO: generate half population from model and half randomly
@@ -100,14 +122,6 @@ class Dpso:
         particle_second_half = self.prtl_init(num_random_particles)
         particle = np.concatenate((particle_first_half, particle_second_half), axis=0)
         return particle
-    def global_best(self, particle, prtl_fitness):
-        min_id = np.argmin(prtl_fitness)
-        # print(prtl_fitness)
-        # print(min_id)
-        gbest = particle[min_id]
-        gbest_fit = prtl_fitness[min_id]
-        return gbest, gbest_fit
-    
     def run(self):
         if self.prtl_init_method == "random":
             prtl = self.prtl_init(self.num_particles)
@@ -116,26 +130,28 @@ class Dpso:
         else:
             raise ValueError(f'{self.prtl_init_method} is not supported for particle initialization')
         prtl_fit = self.comm_cost(prtl)
-        lcl_bst_prtl = np.copy(prtl)
-        lcl_bst_fit = np.copy(prtl_fit)
         gbest, gbfit = self.global_best(prtl, prtl_fit)
         gb_fits = [gbfit]
         gb_prtls = [gbest]
         check = 0
         for j in range(self.max_iterations):
+            # np.set_printoptions(threshold=sys.maxsize)
             # next generation of good particles
-            evolve_particles(prtl, lcl_bst_prtl, gbest)
+            childs1 = crossover(prtl)
+            childs2 = mutation(prtl)
+            childs = np.concatenate((childs1, childs2), axis=0)
+            # print(f'childs:\n{childs}')
+            childs_fit = self.comm_cost(childs)
+            all_prtls = np.concatenate((prtl, childs), axis=0)
+            all_prtls_fit = np.concatenate((prtl_fit, childs_fit), axis=0)
+            # select the top num_particles particles
+            indices = all_prtls_fit.argpartition(self.num_particles)[:self.num_particles]
+            prtl = all_prtls[indices]
+            prtl_fit = all_prtls_fit[indices]
             # calculate global and local best for this generation
-            prtl_fit = self.comm_cost(prtl)
-            # update lcl_bst_prtl and lcl_bst_fit
-            update_condition = prtl_fit < lcl_bst_fit
-            lcl_bst_prtl = \
-                np.where(update_condition.reshape(self.num_particles, 1), prtl, lcl_bst_prtl)
-            lcl_bst_fit = np.where(update_condition, prtl_fit, lcl_bst_fit)
-            # update gbest and gbfit for this generation
             gbest, gbfit = self.global_best(prtl, prtl_fit)
             if (j % 10 == 0):
-                print(f'iteration {j}: gbest fitness {gbfit}')
+                print(f'iteration: {j} gbest fitness {gbfit}')
             if (gb_fits[-1] <= gbfit):
                 check += 1
                 if (check >= 500):
@@ -149,18 +165,15 @@ class Dpso:
         min_fit_idx = np.argmin(gb_fits)
         return gb_prtls[min_fit_idx], gb_fits[min_fit_idx]
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Usage: python3 pso_sahu_modified.py <dataset> <no_of_particles> <initial_population_generation_method(random/model)> <model_path>")
-        sys.exit(1)
-    dataset = sys.argv[1]
-    num_particles = int(sys.argv[2])
-    prtl_init_method = sys.argv[3]
-    if prtl_init_method == "model":
-        model_path = sys.argv[4]
-    else:
-        model_path = None
-    dpso = Dpso(dataset, num_particles, 5000, prtl_init_method, model_path)
-    best_prtl,cost = dpso.run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset', help="path to the data file", type=str)
+    parser.add_argument('-p','--num_prtl', help="number of particles in each generation", type=int, default=100)
+    parser.add_argument('-i','--max_iter', help="max number of iterations", type=int, default=1000)
+    parser.add_argument('-m','--model', help="path to the model file for initial population generation", type=str, default=None)
+    args = parser.parse_args()
+    prtl_init_method = "random" if args.model is None else "model"
+    ga = GA(args.dataset, args.num_prtl, args.max_iter, prtl_init_method, args.model)
+    best_prtl,cost = ga.run()
     print(f'best particle {best_prtl}')
     print(f'best cost {cost}')
     # measure time taken and best cost by running the algorithm 5 times

@@ -6,42 +6,55 @@ from utils.utils import communication_cost_multiple_samples
 from utils.datagenerate import generate_distance_matrix
 from torch_geometric.loader import DataLoader
 from numba import njit
-import sys
 from models.mpnn_ptr import MpnnPtr
 from timeit import default_timer as timer
+import random
 import argparse
+import sys
 #%%
 @njit
-def transform(idxs, curr_prtl, trns_to_prtl):
+def calc_swap_seq(curr_prtl, trns_to_prtl):
     """
-    Transforms curr_prtl such that it equal to trns_to_prtl at indices given by idxs
+    Calculate the swap sequence to transform curr_prtl to trns_to_prtl 
     """
-    for val in idxs:
-        item = trns_to_prtl[val]
-        if (curr_prtl[val] != item):
-            index = 0
-            for i in range(curr_prtl.shape[0]):
-                if curr_prtl[i] == item:
-                    index = i
-            curr_prtl[index] = curr_prtl[val]
-            curr_prtl[val] = item
+    # copy curr_prtl
+    curr_prtl_cpy = np.copy(curr_prtl)
+    seq = np.zeros((len(curr_prtl-1),), dtype=np.int32 ) 
+    for i in range(curr_prtl_cpy.shape[0] -1):
+        item = trns_to_prtl[i]
+        index = 0
+        for j in range(curr_prtl_cpy.shape[0]):
+            if curr_prtl_cpy[j] == item:
+                index = j
+                break
+        seq[i] = index
+        curr_prtl_cpy[i], curr_prtl_cpy[index] = curr_prtl_cpy[index], curr_prtl_cpy[i]  
+    return seq
 @njit
 def rand_permute2D(particle):
     for i in range(particle.shape[0]):
         particle[i] = np.random.permutation(particle.shape[1])
         # print(particle[i])
 @njit
-def evolve_particles(lcl_locs, gbest_locs, prtls, lcl_bst_prtl, gbest):
+def apply_swap_seq(particle, seq, p=1):
+    for i in range(seq.size):
+        if random.random() < p:
+            particle[seq[i]], particle[i] = particle[i], particle[seq[i]]
+
+@njit
+def evolve_particles(prtls, lcl_bst_prtl, gbest):
     """
     Evolves particles using lcl_locs for lcl_bst_prtl and gbest_locs for gbest
     """
-    for i in  range(prtls.shape[0]):
+    for i in range(prtls.shape[0]):
         curr_prtl = prtls[i]
         curr_lcl_bst_prtl = lcl_bst_prtl[i]
-        transform(lcl_locs, curr_prtl, curr_lcl_bst_prtl)
-        transform(gbest_locs, curr_prtl, gbest)
+        seq_lcl = calc_swap_seq(curr_prtl, curr_lcl_bst_prtl)
+        seq_gbl = calc_swap_seq(curr_prtl, gbest)
+        apply_swap_seq(prtls[i], seq_lcl, .5)
+        apply_swap_seq(prtls[i], seq_gbl, .5)        
 #%%
-class Dpso:
+class Psmap:
     def __init__(self, dataset_path, num_particles,\
         max_iterations, prtl_init_method="random", model_path=None):
         device = torch.device("cpu")
@@ -95,15 +108,6 @@ class Dpso:
         gbest = particle[min_id]
         gbest_fit = prtl_fitness[min_id]
         return gbest, gbest_fit
-    def best_bad(self, prtl, prtl_fit):
-        l = prtl.shape[0]
-        bstp_no = l // 2
-        partition_ids = np.argpartition(prtl_fit, -bstp_no)
-        # ids of bad particles
-        badp_ids = partition_ids[-bstp_no:]
-        # ids of best particles
-        bstp_ids = partition_ids[:-bstp_no]
-        return bstp_ids, badp_ids
     
     def run(self):
         if self.prtl_init_method == "random":
@@ -117,32 +121,18 @@ class Dpso:
         lcl_bst_fit = np.copy(prtl_fit)
         gbest, gbfit = self.global_best(prtl, prtl_fit)
         gb_fits = [gbfit]
+        gb_prtls = [gbest]
         check = 0
         for j in range(self.max_iterations):
-            bstp_ids, badp_ids = self.best_bad(prtl, prtl_fit)
-            bst_prtl = prtl[bstp_ids]
-            bad_prtl = prtl[badp_ids]
-            rand_loc = np.random.permutation(self.particle_size)
-            swap_limit_good = math.ceil(self.particle_size / 24)
-            swap_limit_bad = math.ceil(self.particle_size / 12)
-            lbest_loc = rand_loc[0:swap_limit_good // 2]  
-            gbest_loc = rand_loc[swap_limit_good // 2:swap_limit_good]
-            bad_loc1 = rand_loc[0:swap_limit_bad // 2]
-            bad_loc2 = rand_loc[swap_limit_bad // 2:swap_limit_bad]
             # next generation of good particles
-            evolve_particles(lbest_loc, gbest_loc, bst_prtl, lcl_bst_prtl, gbest)
-            # next generation of bad particles
-            rand_permute2D(bad_prtl)
-            evolve_particles(bad_loc1, bad_loc2, bad_prtl, lcl_bst_prtl, gbest)
+            evolve_particles(prtl, lcl_bst_prtl, gbest)
             # calculate global and local best for this generation
-            prtl = np.vstack((bst_prtl, bad_prtl))
             prtl_fit = self.comm_cost(prtl)
             # update lcl_bst_prtl and lcl_bst_fit
-            all_ids = np.concatenate((bstp_ids, badp_ids))
-            update_condition = prtl_fit < lcl_bst_fit[all_ids]
+            update_condition = prtl_fit < lcl_bst_fit
             lcl_bst_prtl = \
-                np.where(update_condition.reshape(self.num_particles, 1), prtl, lcl_bst_prtl[all_ids, :])
-            lcl_bst_fit = np.where(update_condition, prtl_fit, lcl_bst_fit[all_ids])
+                np.where(update_condition.reshape(self.num_particles, 1), prtl, lcl_bst_prtl)
+            lcl_bst_fit = np.where(update_condition, prtl_fit, lcl_bst_fit)
             # update gbest and gbfit for this generation
             gbest, gbfit = self.global_best(prtl, prtl_fit)
             if (j % 10 == 0):
@@ -155,27 +145,32 @@ class Dpso:
             else:
                 check = 0
             gb_fits.append(gbfit)
-        return min(gb_fits)
+            gb_prtls.append(gbest)
+        gb_fits = np.array(gb_fits)
+        min_fit_idx = np.argmin(gb_fits)
+        return gb_prtls[min_fit_idx], gb_fits[min_fit_idx]
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', help="path to the data file", type=str)
-    parser.add_argument('--num_prtl', help="number of particles in each generation", type=int, default=100)
-    parser.add_argument('--max_iter', help="max number of iterations", type=int, default=1000)
-    parser.add_argument('--model', help="path to the model file for initial population generation", type=str, default=None)
+    parser.add_argument('-p','--num_prtl', help="number of particles in each generation", type=int, default=100)
+    parser.add_argument('-i','--max_iter', help="max number of iterations", type=int, default=1000)
+    parser.add_argument('-m','--model', help="path to the model file for initial population generation", type=str, default=None)
     args = parser.parse_args()
     prtl_init_method = "random" if args.model is None else "model"
-    dpso = Dpso(args.dataset, args.num_prtl, args.max_iter, prtl_init_method, args.model)
-    cost = dpso.run()
+    psmap = Psmap(args.dataset, args.num_prtl, args.max_iter, prtl_init_method, args.model)
+    best_prtl,cost = psmap.run()
+    print(f'best particle {best_prtl}')
     print(f'best cost {cost}')
     # measure time taken and best cost by running the algorithm 5 times
     # best_cost = float('inf')
     # best_time = float('inf')
     # for i in range(5):
     #     start_time = timer()
-    #     cost = dpso.run()
+    #     best_prtl, cost = dpso.run()
     #     end_time = timer()
     #     time_taken = end_time - start_time
-    #     print(f'i = {i}: best cost {cost} in {time_taken} seconds')
+    #     np.set_printoptions(threshold=sys.maxsize)
+    #     print(f'i = {i}: best cost {cost} best particle {best_prtl} in {time_taken} seconds')
     #     if cost < best_cost:
     #         best_cost = cost
     #     if time_taken < best_time:
