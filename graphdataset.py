@@ -37,7 +37,7 @@ class MultipleGraphDataset(InMemoryDataset):
         self._processed_file_names = value
     def process(self,):
         datalist_all = []
-        max_num_nodes = 0
+        # max_num_nodes = 0
         start_pos_data = []
         cumm_count = 0
         for raw_path in self.raw_paths:

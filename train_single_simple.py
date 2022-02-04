@@ -1,9 +1,10 @@
 #%%
 from torch_geometric.loader.dataloader import DataLoader
+from torch_geometric.data import Data
 from models.mpnn_ptr import MpnnPtr
 from utils.baseline import calculate_baseline
 from utils.utils import communication_cost, init_weights
-from utils.datagenerate import generate_distance_matrix
+from utils.datagenerate import generate_distance_matrix, DistanceMatrix
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
@@ -46,27 +47,19 @@ epoch_penalty = torch.zeros(len(dataloader))
 loss_list_pre = []
 num_samples = int(sys.argv[4]) + 1 if len(sys.argv) > 4 else 5
 mpnn_ptr.train()
-#%%
-for epoch in range(num_epochs):
-    for i, data in enumerate(dataloader):
-        samples, log_likelihoods_sum = mpnn_ptr(data, num_samples)
-        # select the first sample for each graph in the batch
-        predicted_mappings = samples[:data.num_graphs]
-        log_likelihoods_sum = log_likelihoods_sum[:data.num_graphs]
-        # remaining samples for baseline calculation
-        samples = samples[data.num_graphs:]
-        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
-        epoch_penalty[i] = penalty.mean()
-        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, samples, num_samples - 1)
-        loss = torch.mean((penalty.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
-        optim.zero_grad()
-        loss.backward()
-        nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
-        optim.step()
-        lr_schedular.step()
-    batch_loss = epoch_penalty.mean().item()
-    loss_list_pre.append(batch_loss)
-    print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, num_epochs, batch_loss))
+
+def train(mpnn_ptr, dataloader_train, dataloader_dev, num_epochs, optim, distance_matrix_dict=DistanceMatrix()):
+    for epoch in range(num_epochs):
+        for data in dataloader:
+            loss = train_step_init_pop(mpnn_ptr, data, distance_matrix, num_samples)
+            optim.zero_grad()
+            loss.backward()
+            nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
+            optim.step()
+            lr_schedular.step()
+        batch_loss = epoch_penalty.mean().item()
+        loss_list_pre.append(batch_loss)
+        print('Epoch: {}/{}, Loss: {}'.format(epoch + 1, num_epochs, batch_loss))
 #%%
 # save the model
 datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
