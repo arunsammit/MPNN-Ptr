@@ -53,6 +53,5 @@ class TrainerEMA(Trainer):
             self.baseline = penalty.mean()
         else:
             self.baseline = 0.9 * self.baseline + 0.1 * penalty.mean()
-        # penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, data.num_graphs,  distance_matrix, samples)
         loss = torch.mean((penalty.detach() - self.baseline.detach()) * log_likelihoods_sum)
         return loss, penalty.sum()
