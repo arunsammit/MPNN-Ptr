@@ -1,4 +1,5 @@
 #%%
+from typing import List, Union
 from torch_geometric.loader.dataloader import DataLoader
 from models.mpnn_ptr import MpnnPtr
 from utils.utils import communication_cost_multiple_samples , init_weights
@@ -11,8 +12,6 @@ from datetime import datetime
 import argparse
 from pathlib import Path
 import time
-#%%
-
 
 #%%
 # load data and generate distance matrix
@@ -21,10 +20,7 @@ import time
 def initialize(model_path, datapath, batch_size, device):
     datalist = torch.load(datapath, map_location=device)
     graph_size = datalist[0].num_nodes
-    n = math.ceil(math.sqrt(graph_size))
-    m = math.ceil(graph_size/n)
     dataloader = DataLoader(datalist, batch_size, shuffle=True)
-    distance_matrix = generate_distance_matrix(n,m).to(device)
     max_weight = 0
     for i in range(len(datalist)):
         max_weight = max(max_weight, datalist[i].edge_attr.max())
@@ -34,7 +30,7 @@ def initialize(model_path, datapath, batch_size, device):
         mpnn_ptr.load_state_dict(torch.load(model_path, map_location=device))
     else:
         mpnn_ptr.apply(init_weights)
-    return mpnn_ptr, dataloader, distance_matrix
+    return mpnn_ptr, dataloader
 #%%
 # initializing the optimizer
 
@@ -54,14 +50,18 @@ def train_step(mpnn_ptr, dataloader, distance_matrix, optimizer, num_samples):
         optimizer.step()
     return epoch_loss / len(dataloader.dataset)
 #%%
-def train(mpnn_ptr, dataloader, distance_matrix, num_samples, epochs, lr, lr_decay_rate, lr_step_size = 10, loss_list = None):
+def train(mpnn_ptr, dataloaders:Union[List[DataLoader],DataLoader], num_samples, epochs, lr, lr_decay_rate, lr_step_size = 10, loss_list = None):
     optimizer = torch.optim.Adam(mpnn_ptr.parameters(), lr=lr)
     lr_schedular = torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=lr_decay_rate)
     if not loss_list:
         loss_list = []
+    if not isinstance(dataloaders, List):
+        dataloaders = [dataloaders]
     for epoch in range(epochs):
+        epoch_loss = 0.0
         start_time = time.time()
-        epoch_loss = train_step(mpnn_ptr, dataloader, distance_matrix, optimizer, num_samples)
+        for dataloader in dataloaders:
+            epoch_loss += train_step(mpnn_ptr, dataloader, optimizer, num_samples)
         end_time = time.time()
         lr_schedular.step()
         loss_list.append(epoch_loss)
@@ -74,8 +74,8 @@ def train(mpnn_ptr, dataloader, distance_matrix, num_samples, epochs, lr, lr_dec
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     loss_list = torch.load(args.loss_list_path) if args.loss_list_path else []
-    mpnn_ptr, dataloader, distance_matrix = initialize(args.model_path, args.datapath, args.batch_size, device)
-    loss_list = train(mpnn_ptr, dataloader, distance_matrix, args.num_samples, args.epochs, args.lr, args.lr_decay_rate, loss_list=loss_list)
+    mpnn_ptr, dataloader = initialize(args.model_path, args.datapath, args.batch_size, device)
+    loss_list = train(mpnn_ptr, dataloader, args.num_samples, args.epochs, args.lr, args.lr_decay_rate, loss_list=loss_list)
     datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
     graph_size = dataloader.dataset[0].num_nodes
     Path('models_data').mkdir(parents=True, exist_ok=True)

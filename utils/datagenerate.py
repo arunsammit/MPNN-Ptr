@@ -1,4 +1,5 @@
 #%%
+from collections import defaultdict
 import networkx as nx
 import random
 import numpy as np
@@ -8,6 +9,8 @@ from torch_geometric.loader import DataLoader
 from typing import List
 import torch
 import sys
+from collections import defaultdict
+import math
 #%%
 def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, device=torch.device('cpu'), shuffle=False) -> DataLoader:
     n = np.ceil(np.sqrt(sizes_list)).astype(int)
@@ -45,8 +48,22 @@ def generate_distance_matrix(n,m):
         for j, val in d.items():
             D[i, j] = val
     return torch.from_numpy(D)
+def default_distance_matrix(graph_size):
+    n = math.ceil(math.sqrt(graph_size))
+    m = math.ceil(graph_size/n)
+    return generate_distance_matrix(n, m)
 
-#%%
+class DistanceMatrix(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def __missing__(self, graph_size):
+        value = default_distance_matrix(graph_size)
+        self[graph_size] = value
+        return value
+
+
+# %%
+
 def generate_graph_data_list(graph_size: int, num_graphs: int) -> List[Data]:
     rng = default_rng()
     datalist = []

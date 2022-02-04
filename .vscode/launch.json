@@ -26,7 +26,8 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}",
                 "PYTHONIOENCODING": "utf-8"
-            }
+            },
+            "justMyCode": false
         },
         {
             "name": "Python: Attach",
@@ -59,14 +60,6 @@
                 "128"
             ],
             "console": "integratedTerminal",
-        },
-        {
-            "name": "Python: Current File",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            // "cwd": "${workspaceFolder}"
         }
     ]
 }

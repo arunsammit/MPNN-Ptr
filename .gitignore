@@ -144,4 +144,5 @@ cython_debug/
 discarded/
 
 # pytorch generated data files
-data*.pt
+data_nx/**
+data_tgff/**

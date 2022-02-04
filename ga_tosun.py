@@ -105,15 +105,15 @@ class GA:
         # TODO: generate half population from model and half randomly
         num_sampled_particles = int(num_particles * .8)
         num_random_particles = num_particles - num_sampled_particles
-        mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0.1, device=self.device, logit_clipping=True)
+        mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0.1, device=self.device, logit_clipping=True, decoding_type="greedy",feature_scale=290)
         if self.model_path is None:
             raise ValueError('model_path is None')
         mpnn_ptr.load_state_dict(torch.load(self.model_path))
         mpnn_ptr.eval()
         with torch.no_grad():
             # generate initial population
-            particle_sampled, _ = mpnn_ptr(self.data, 100000)
-        particle_sampled = np.unique(particle_sampled.detach().numpy(),axis=0)
+            particle_sampled, _ = mpnn_ptr(self.data, 10000)
+        particle_sampled = particle_sampled.cpu().numpy()
         particle_sampled_fit = self.comm_cost(particle_sampled)
         indices = particle_sampled_fit.argpartition(num_sampled_particles)[:num_sampled_particles]
         particle_first_half = particle_sampled[indices]
@@ -192,3 +192,5 @@ if __name__ == "__main__":
     #         best_time = time_taken
     # print(f'Time taken to run the algorithm: {best_time}')
     # print(f'Best cost: {best_cost}')
+# command to run the code:
+# python3 ga_tosun.py data_tgff/data_single_TGFF1_16.pt --num_prtl 1024 --max_iter 5000 --model models_data_final/model_16_01-10.pt

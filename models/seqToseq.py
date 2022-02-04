@@ -1,10 +1,25 @@
 from typing import Tuple
 from torch import Tensor, nn
 import torch
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, PackedSequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 
-
+def rearrange(x:torch.Tensor, beams_buf:torch.Tensor)->torch.Tensor:
+    batch_size, num_samples = beams_buf.size()
+    if x.dim() == 1:
+        return x.view(batch_size, num_samples).gather(1,beams_buf).view(-1)
+    elif x.dim() == 2:
+        return x.view(batch_size, num_samples, -1)\
+            .gather(1,beams_buf.unsqueeze(-1).expand(-1, -1, x.size(-1)))\
+                .view(-1, x.size(-1))
+    elif x.dim() == 3:
+        return x.permute(1,0,2)\
+            .view(batch_size, num_samples, x.size(0), x.size(2))\
+            .gather(1,beams_buf.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, x.size(0), x.size(2)))\
+                .view(-1, x.size(0), x.size(2))\
+                    .permute(1,0,2)\
+                        .contiguous()
+        
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_layers,
                  p):
@@ -62,7 +77,7 @@ class Attention(nn.Module):
         if self.logit_clipping:
             attention = self.clip_value * torch.tanh(attention)
         # use mask to remove the attention weights for padded values
-        attention = attention.masked_fill(mask == 0, -1e10)
+        attention = attention.masked_fill(mask == 0, float('-inf'))
         # attention shape: (batch, seq_len)
         return attention
 
@@ -104,12 +119,14 @@ class PointerNet(nn.Module):
         # reshape input and mask to remove extra padding
         input = input[:seq_len]
         mask = mask[:, :seq_len]
-        batch_size = input.size(1)
         return input, mask
 
+
     def forward(self, input: Tensor, mask, num_samples=1):
+
         # sample n_samples mapping solutions for each sequence in the batch
         input, mask = self.preprocess(input, mask)
+        # input shape: (seq_len, batch_size, input_dim)
         batch_size = input.size(1)
         seq_len = input.size(0)
         # Tensor to store the predicted mapping
@@ -120,7 +137,7 @@ class PointerNet(nn.Module):
         decoder_input = self.initial_decoder_input.repeat(batch_size, 1)
         # mask to be used while calculating attention weights
         mask_decoding = mask.clone()
-        log_probs_list = []
+        log_probs_sum = torch.zeros(batch_size * num_samples, dtype=torch.float32).to(self.device)
         for t in range(seq_len):
             output, (hidden, cell) = self.decoder(decoder_input, hidden, cell)
             logits = self.attn(output, encoder_outputs, mask_decoding)
@@ -132,52 +149,81 @@ class PointerNet(nn.Module):
                 # selected_indices shape: (batch * num_samples,)
                     selected_indices = torch.multinomial(log_probs.exp(), num_samples, replacement=True).long().view(-1)
                 elif self.decoding_type == 'greedy':
-                    if num_samples != 1:
-                        raise ValueError('Greedy decoding can only be used with one sample')
-                    selected_indices = torch.argmax(log_probs, dim=1).long()
+                    _, selected_indices = torch.topk(log_probs, min(num_samples, log_probs.size(1)), dim=1)
+                    # selected_indices shape: (batch, min(num_samples, seq_len))
+                    if num_samples > log_probs.size(1):
+                        # pad second dimension with -1 so that the shape becomes (batch, num_samples)
+                        selected_indices = torch.cat((selected_indices, torch.full((batch_size, num_samples - log_probs.size(1)), -1, device=self.device)), dim=1)
+                    selected_indices = selected_indices.view(-1)
                 log_probs = log_probs.repeat_interleave(num_samples, dim=0)
+                # make log_probs -inf for the values which are -1 in selected_indices
+                log_probs = log_probs.masked_fill((selected_indices == -1)\
+                    .unsqueeze(-1), float('-inf'))
                 mask_decoding = mask_decoding.repeat_interleave(num_samples, dim=0)
+                # mask_decoding shape: (batch * num_samples, seq_len)
                 hidden = hidden.repeat_interleave(num_samples, dim=1)
                 cell = cell.repeat_interleave(num_samples, dim=1)
                 encoder_outputs = encoder_outputs.repeat_interleave(num_samples, dim=1)
             else:
-                selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
+                if self.decoding_type == 'sampling':
+                    selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
+                elif self.decoding_type == 'greedy':
+                    scores = log_probs + log_probs_sum.unsqueeze(-1) 
+                    scores = scores.view(batch_size, -1)
+                    _, indices_buf = torch.topk(scores, num_samples, dim=1)
+                    # indices_buf shape: (batch, min(num_samples, scores.size(1)))
+                    beams_buf = torch.div(indices_buf, seq_len,rounding_mode='floor')
+                    indices_buf = indices_buf.fmod(seq_len)
+                    selected_indices = indices_buf.view(-1)
+                    predicted_mappings[:,:t] = rearrange(predicted_mappings[:,:t], beams_buf)
+                    log_probs_sum = rearrange(log_probs_sum, beams_buf)
+                    mask_decoding = rearrange(mask_decoding, beams_buf)
+                    log_probs = rearrange(log_probs, beams_buf)
+                    hidden = rearrange(hidden, beams_buf)
+                    cell = rearrange(cell, beams_buf)
             predicted_mappings[:, t] = selected_indices
-            log_probs_list.append(log_probs)
+            gather_indices = selected_indices.unsqueeze(-1).clone()
+            gather_indices[gather_indices == -1] = 0 
+            curr_log_probs = log_probs.gather(1, gather_indices).squeeze(-1) \
+                * mask.repeat_interleave(num_samples, dim=0)[:, t]
+            log_probs_sum += curr_log_probs
             # decoder_input shape: (batch, input_dim)
-            decoder_input = input.repeat_interleave(num_samples, dim=1)[selected_indices,
+            decoder_input = input.repeat_interleave(num_samples, dim=1)[gather_indices.squeeze(-1),
                                                                       torch.arange(batch_size * num_samples)]
             # update the mask_decoding to remove the pointed inputs
-            mask_decoding.scatter_(1, selected_indices.unsqueeze(1), 0)
-        # calculate the log likelihoods
-        log_probs = torch.stack(log_probs_list, dim=1).to(self.device)
-        # log_probs shape: (batch * num_samples, seq_len, seq_len)
-        log_likelihoods = log_probs.gather(2, predicted_mappings.unsqueeze(-1)).squeeze(-1)
-        # log_likelihoods shape: (batch * num_samples, seq_len)
-        # ignoring the probabilities of the padded values
-        log_likelihoods = log_likelihoods.masked_fill(mask.repeat_interleave(num_samples, dim=0) == 0, 0)
+            mask_decoding.scatter_(1, gather_indices, 0)
         # assign -1 to the mappings corresponding to the padded values to denote that it is invalid
         predicted_mappings = predicted_mappings.masked_fill(mask.repeat_interleave(num_samples, dim=0) == 0, -1)
         # # reshape the predicted_mappings to (batch_size, seq_len, n_samples)
         # predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len)
-        log_likelihoods_sum = log_likelihoods.sum(dim=1)
         predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len).transpose(0, 1).reshape(-1,seq_len)
-        log_likelihoods_sum = log_likelihoods_sum.view(batch_size, num_samples).transpose(0, 1).reshape(-1)
-        return predicted_mappings, log_likelihoods_sum
+        log_probs_sum = log_probs_sum.view(batch_size, num_samples).transpose(0, 1).reshape(-1)
+        return predicted_mappings, log_probs_sum
 
-if __name__ == '__main__':
-    # test the model
-    input_dim = 5
-    hidden_dim = 8
+
+def main():
+     # test the model
+    torch.manual_seed(100)
+    import random
+    random.seed(100)
+    input_dim = 16
+    hidden_dim = 32
     n_layers = 2
     p = 0.1
-    batch_size = 4
-    max_seq_len = 10
+    batch_size = 1
+    seq_len = 16
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = PointerNet(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True).to(device)
-    input = torch.randn(max_seq_len, batch_size, input_dim).to(device)
-    mask = torch.ones(batch_size, max_seq_len).to(device)
+    model = PointerNet(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True,decoding_type='greedy').to(device)
+    input = torch.randn(seq_len, batch_size, input_dim).to(device)
+    mask = torch.ones(batch_size, seq_len).to(device)
     # mask[-1, :] = 1
     predicted_mappings, log_likelihoods_sum = model(input, mask, num_samples=4)
+    print('---predicted_mappings---')
     print(predicted_mappings)
+    print('---log_likelihoods_sum---')
     print(log_likelihoods_sum)
+    print('---number of unique mappings---')
+    print(torch.unique(predicted_mappings, dim=0).size(0))
+
+if __name__ == '__main__':
+    main()

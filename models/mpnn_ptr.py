@@ -29,8 +29,7 @@ class MpnnPtr(nn.Module):
         # pass embeddings and mask through PointerNet to get pointer
         predicted_mappings, log_likelihoods_sum = self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
         return predicted_mappings, log_likelihoods_sum
-
-if __name__ == '__main__':
+def main():
     from utils.datagenerate import generate_graph_data_list
     from utils.datagenerate import generate_graph_data_loader_with_distance_matrix
     from torch_geometric.loader import DataLoader
@@ -47,3 +46,5 @@ if __name__ == '__main__':
         predicted_mappings, log_likelihoods_sum = mpnn_ptr(data)
         print(predicted_mappings)
         print(log_likelihoods_sum)
+if __name__ == '__main__':
+    main()
