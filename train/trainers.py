@@ -16,10 +16,11 @@ class Trainer:
     def train(self, dataloader:DataLoader, distance_matrix_dict, optimizer):
         self.model.train()
         epoch_loss = 0
-        for i, data in enumerate(dataloader):
+        for data in dataloader:
             optimizer.zero_grad()
             data = data.to(self.device)
-            loss, comm_cost_sum = self.train_step(data, distance_matrix_dict[i])
+            distance_matrix = distance_matrix_dict[data.num_nodes]
+            loss, comm_cost_sum = self.train_step(data, distance_matrix)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, norm_type=2)
             optimizer.step()
