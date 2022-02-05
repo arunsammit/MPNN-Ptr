@@ -1,6 +1,8 @@
 from utils.baseline import calculate_baseline
 from utils.utils import communication_cost, communication_cost_multiple_samples
+from utils.baseline import paired_t_test
 from torch_geometric.data import Data
+import copy
 import torch
 class Trainer:
     def __init__(self, model, device):
@@ -55,3 +57,35 @@ class TrainerEMA(Trainer):
             self.baseline = 0.9 * self.baseline + 0.1 * penalty.mean()
         loss = torch.mean((penalty.detach() - self.baseline.detach()) * log_likelihoods_sum)
         return loss, penalty.sum()
+class TrainerGR(Trainer):
+    def __init__(self, model, baseline_model, device, num_batches, stablize_baseline=False):
+        self.num_batches = num_batches
+        self.baseline_model = baseline_model
+        self.baseline_model.decoding_type = 'greedy'
+        self.baseline_model.eval()
+        self.baseline = None
+        self.batch_counter = 0
+        self.stablize_baseline = stablize_baseline
+        self.epoch_counter = 0 
+        super().__init__(model, device)
+    def train_step(self, data:Data, distance_matrix):
+        data = self.pre_steps(data)
+        predicted_mappings, log_likelihoods_sum = self.model(data, 1)
+        penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
+        if self.stablize_baseline and self.epoch_counter == 0:
+            if self.baseline is None:
+                self.baseline = penalty.mean()
+            else:
+                self.baseline = 0.8 * self.baseline + 0.2 * penalty.mean()
+        else:
+            with torch.no_grad():
+                baseline_mappings, _ = self.baseline_model(data, 1)
+                self.baseline = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, baseline_mappings)
+        loss = torch.mean((penalty.detach() - self.baseline.detach()) * log_likelihoods_sum)
+        self.batch_counter += 1
+        if self.batch_counter == self.num_batches:
+            self.batch_counter = 0
+            self.epoch_counter += 1
+        return loss, penalty.sum()
+        
+
