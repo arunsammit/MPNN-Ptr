@@ -1,24 +1,35 @@
+from typing import Tuple
 from utils.baseline import calculate_baseline
 from utils.utils import communication_cost, communication_cost_multiple_samples
 from utils.baseline import paired_t_test
 from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
+from torch import Tensor
 import copy
 import torch
 class Trainer:
-    def __init__(self, model, device):
-        self.device = device
+    def __init__(self, model):
+        self.device = model.device
         self.model = model
-    def pre_steps(self, data:Data):
-        self.model.train()
-        return data.to(self.device)
-    def train_step(self, data:Data, distance_matrix):
+    def train_step(self, data:Data, distance_matrix)->Tuple[Tensor, float]:
         raise NotImplementedError
+    def train(self, dataloader:DataLoader, distance_matrix_dict, optimizer):
+        self.model.train()
+        epoch_loss = 0
+        for i, data in enumerate(dataloader):
+            optimizer.zero_grad()
+            data = data.to(self.device)
+            loss, comm_cost_sum = self.train_step(data, distance_matrix_dict[i])
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, norm_type=2)
+            optimizer.step()
+            epoch_loss += comm_cost_sum
+        return epoch_loss / len(dataloader.dataset)
 class TrainerInitPop(Trainer):
     def __init__(self, model, device, num_samples=9):
         self.num_samples = num_samples
         super().__init__(model, device)
     def train_step(self, data:Data, distance_matrix):
-        data = self.pre_steps(data)
         samples, log_likelihoods_sum = self.model(data, self.num_samples)
         # select the first sample for each graph in the batch
         predicted_mappings = samples[:data.num_graphs]
@@ -34,7 +45,6 @@ class TrainerSR(Trainer):
         self.num_samples = num_samples
         super().__init__(model, device)
     def train_step(self, data:Data, distance_matrix):
-        data = self.pre_steps(data)
         mappings, ll_sum = self.model(data, self.num_samples)
         comm_cost, baseline = communication_cost_multiple_samples(data.edge_index, data.edge_attr, data.batch, distance_matrix, mappings, self.num_samples, calculate_baseline=True)
         penalty_baseline = baseline.repeat(self.num_samples)
@@ -46,7 +56,6 @@ class TrainerEMA(Trainer):
         self.alpha = alpha
         super().__init__(model, device)
     def train_step(self, data:Data, distance_matrix):
-        data = self.pre_steps(data)
         predicted_mappings, log_likelihoods_sum = self.model(data, 1)
         # predicted_mappings shape: (batch_size, max_graph_size_in_batch)
         # log_likelihoods_sum shape: (batch_size,)
@@ -69,7 +78,6 @@ class TrainerGR(Trainer):
         self.epoch_counter = 0 
         super().__init__(model, device)
     def train_step(self, data:Data, distance_matrix):
-        data = self.pre_steps(data)
         predicted_mappings, log_likelihoods_sum = self.model(data, 1)
         penalty = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
         if self.stablize_baseline and self.epoch_counter == 0:

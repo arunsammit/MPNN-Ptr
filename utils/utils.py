@@ -18,6 +18,9 @@ def communication_cost(edge_index, edge_attr, batch, distance_matrix, predicted_
 
 @torch.no_grad()
 def communication_cost_multiple_samples(edge_index:torch.Tensor, edge_attr, batch, distance_matrix, predicted_mappings, num_samples, calculate_baseline = False):
+    """
+    Samples should be present in the graph wise fashion. This means that the sample corresponding to the first graph is present at the indices 0, 0 + batch_size, 0 + 2 * batch_size etc. The sample corresponding to the second graph is present at indices 1, 1 + batch_size, 1 + 2 * batch_size etc.
+    """
     graph_size = predicted_mappings.size(1)
     batch_size = predicted_mappings.size(0) // num_samples
     device = edge_index.device
