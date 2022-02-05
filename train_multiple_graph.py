@@ -26,7 +26,7 @@ num_samples = 8
 training_algorithm = 'init_pop' # 'init_pop' or 'pretrain'
 #%%
 train_dataloader = getDataLoader('data_tgff/multiple/train', batch_size_train, max_graph_size)
-dev_dataloader = getDataLoader('data_tgff/multiple/dev', batch_size_dev, max_graph_size)
+dev_dataloader = getDataLoader('data_tgff/multiple/test', batch_size_dev, max_graph_size)
 #%% initialize the models
 mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 10, hidden_dim=max_graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True)
 mpnn_ptr.to(device)

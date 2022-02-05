@@ -95,7 +95,7 @@ def getDataLoader(root, batch_size, max_graph_size):
     raw_file_names = [f for f in os.listdir(f'{root}/raw') if os.path.isfile(f'{root}/raw/{f}') and int(re.split('_|[.]',f)[-2]) <= max_graph_size]
     dataset = MultipleGraphDataset(root, raw_file_names=raw_file_names, transform=get_transform(max_num_nodes=max_graph_size))
     batch_sampler = BucketSampler(dataset, batch_size)
-    return DataLoader(dataset, batch_size=batch_size, batch_sampler=batch_sampler)
+    return DataLoader(dataset, batch_sampler=batch_sampler)
 
 def main():
     root = 'data_tgff/multiple/train'
