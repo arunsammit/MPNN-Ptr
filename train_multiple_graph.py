@@ -15,9 +15,9 @@ from train.trainers import TrainerInitPop, TrainerSR
 from train.validation import validate_dataloader
 #%% initializing the parameters
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-max_graph_size = 36
+max_graph_size = 49
 batch_size_train = 128
-batch_size_dev = 1024
+batch_size_dev = 128
 saved_model_path = None
 lr = 0.0001
 lr_decay_gamma = .96
@@ -25,8 +25,12 @@ num_epochs = 100
 num_samples = 8
 training_algorithm = 'init_pop' # 'init_pop' or 'pretrain'
 #%%
-train_dataloader = getDataLoader('data_tgff/multiple/train', batch_size_train, max_graph_size)
-dev_dataloader = getDataLoader('data_tgff/multiple/test', batch_size_dev, max_graph_size)
+root_train = 'data_tgff/multiple/train'
+root_dev = 'data_tgff/multiple/test'
+train_good_files = ['traindata_multiple_TGFF_norm_12.pt', 'traindata_multiple_TGFF_norm_16.pt', 'traindata_multiple_TGFF_norm_20.pt', 'traindata_multiple_TGFF_norm_36.pt', 'traindata_multiple_TGFF_norm_49.pt']
+dev_good_files = ['testdata_multiple_TGFF_norm_16.pt', 'testdata_multiple_TGFF_norm_32.pt']
+train_dataloader = getDataLoader('data_tgff/multiple/train', batch_size_train, max_graph_size = max_graph_size, raw_file_names = train_good_files)
+dev_dataloader = getDataLoader('data_tgff/multiple/test', batch_size_dev, max_graph_size = max_graph_size, raw_file_names = dev_good_files)
 #%% initialize the models
 mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 10, hidden_dim=max_graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True)
 mpnn_ptr.to(device)

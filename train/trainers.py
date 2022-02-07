@@ -17,8 +17,8 @@ class Trainer:
         self.model.train()
         epoch_loss = 0
         for data in dataloader:
-            optimizer.zero_grad()
             data = data.to(self.device)
+            optimizer.zero_grad()
             # print(f"devices are: {data.x.device} and {data.edge_index.device} and {data.edge_attr.device} and {data.batch.device}")
             distance_matrix = distance_matrix_dict[data.num_nodes].to(self.device)
             loss, comm_cost_sum = self.train_step(data, distance_matrix)
@@ -41,7 +41,7 @@ class TrainerInitPop(Trainer):
         comm_cost = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
         penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, samples, self.num_samples - 1)
         loss = torch.mean((comm_cost.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
-        return loss, comm_cost.sum()
+        return loss, float(comm_cost.sum())
 class TrainerSR(Trainer):
     def __init__(self, model, num_samples=8):
         self.num_samples = num_samples
@@ -51,7 +51,7 @@ class TrainerSR(Trainer):
         comm_cost, baseline = communication_cost_multiple_samples(data.edge_index, data.edge_attr, data.batch, distance_matrix, mappings, self.num_samples, calculate_baseline=True)
         penalty_baseline = baseline.repeat(self.num_samples)
         loss = torch.mean((comm_cost.detach() - penalty_baseline.detach()) * ll_sum)
-        return loss, comm_cost.sum()
+        return loss, float(comm_cost.sum())
 class TrainerEMA(Trainer):
     def __init__(self, model, alpha=0.9):
         self.baseline = None
@@ -67,7 +67,7 @@ class TrainerEMA(Trainer):
         else:
             self.baseline = 0.9 * self.baseline + 0.1 * penalty.mean()
         loss = torch.mean((penalty.detach() - self.baseline.detach()) * log_likelihoods_sum)
-        return loss, penalty.sum()
+        return loss, float(penalty.sum())
 class TrainerGR(Trainer):
     def __init__(self, model, baseline_model, num_batches, stablize_baseline=False):
         self.num_batches = num_batches
@@ -96,6 +96,6 @@ class TrainerGR(Trainer):
         if self.batch_counter == self.num_batches:
             self.batch_counter = 0
             self.epoch_counter += 1
-        return loss, penalty.sum()
+        return loss, float(penalty.sum())
         
 
