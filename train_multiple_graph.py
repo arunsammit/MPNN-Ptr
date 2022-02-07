@@ -13,7 +13,7 @@ from datetime import datetime
 from graphdataset import MultipleGraphDataset, getDataLoader
 from train.trainers import TrainerInitPop, TrainerSR
 from train.validation import validate_dataloader
-#%%
+#%% initializing the parameters
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 max_graph_size = 36
 batch_size_train = 128
@@ -37,14 +37,15 @@ else:
     mpnn_ptr.apply(init_weights)
 #%% initialize the training algorithm
 if training_algorithm == 'init_pop':
-    trainer = TrainerInitPop(mpnn_ptr, device, num_samples)
+    trainer = TrainerInitPop(mpnn_ptr, num_samples + 1)
 elif training_algorithm == 'pretrain':
-    trainer = TrainerSR(mpnn_ptr, device, num_samples)
+    trainer = TrainerSR(mpnn_ptr, num_samples)
 distance_matrix_dict = DistanceMatrix()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=lr)
 lr_schedular = torch.optim.lr_scheduler.StepLR(optim, step_size=1, gamma=lr_decay_gamma)
 loss_list_train = []
 loss_list_dev = []
+#%% training starts
 for epoch in range(num_epochs):
     avg_train_comm_cost = trainer.train(train_dataloader, distance_matrix_dict, optim)
     lr_schedular.step()

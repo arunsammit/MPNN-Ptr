@@ -11,6 +11,7 @@ def communication_cost(edge_index, edge_attr, batch, distance_matrix, predicted_
     reverse_mappings_flattened = reverse_mappings[reverse_mappings != -1]
     costs = distance_matrix[reverse_mappings_flattened[edge_index[0]], reverse_mappings_flattened[edge_index[1]]]\
         .unsqueeze(-1)
+    # print(f"costs.device: {costs.device}, edge_attr.device: {edge_attr.device}")
     comm_cost = costs * edge_attr
     comm_cost.squeeze_(-1)
     comm_cost_each = scatter(comm_cost, batch[edge_index[0]], dim=0, dim_size=batch_size, reduce='sum')
