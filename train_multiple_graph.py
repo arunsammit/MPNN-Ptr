@@ -54,7 +54,7 @@ for epoch in range(num_epochs):
     avg_train_comm_cost = trainer.train(train_dataloader, distance_matrix_dict, optim)
     lr_schedular.step()
     loss_list_train.append(avg_train_comm_cost)
-    avg_valid_comm_cost = validate_dataloader(dev_dataloader, mpnn_ptr, distance_matrix_dict)
+    avg_valid_comm_cost = validate_dataloader(mpnn_ptr,dev_dataloader, distance_matrix_dict, 100)
     loss_list_dev.append(avg_valid_comm_cost)
     print(f'Epoch: {epoch + 1}/{num_epochs}, Train Comm Cost: {avg_train_comm_cost:.4f}, Dev Comm Cost: {avg_valid_comm_cost:.4f}')
 #%%
