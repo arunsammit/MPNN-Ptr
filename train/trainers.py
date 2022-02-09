@@ -20,7 +20,7 @@ class Trainer:
             data = data.to(self.device)
             optimizer.zero_grad()
             # print(f"devices are: {data.x.device} and {data.edge_index.device} and {data.edge_attr.device} and {data.batch.device}")
-            distance_matrix = distance_matrix_dict[data.num_nodes].to(self.device)
+            distance_matrix = distance_matrix_dict[data.num_nodes // data.num_graphs].to(self.device)
             loss, comm_cost_sum = self.train_step(data, distance_matrix)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, norm_type=2)

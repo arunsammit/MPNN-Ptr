@@ -171,4 +171,4 @@ if __name__ == '__main__':
     cleanup()
     # main()
     # debug_dataset('data_tgff/multiple/train/raw','data_tgff/multiple/train')
-    print(get_good_files('data_tgff/multiple/train/raw'))
+    print(get_good_files('/home/arun/Desktop/train_data/mod_data/'))
