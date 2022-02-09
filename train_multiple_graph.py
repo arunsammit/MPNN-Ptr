@@ -19,11 +19,11 @@ max_graph_size = 49
 batch_size_train = 128
 batch_size_dev = 128
 saved_model_path = None
-lr = 0.0001
+lr = 0.001
 lr_decay_gamma = .96
 num_epochs = 100
 num_samples = 8
-training_algorithm = 'init_pop' # 'init_pop' or 'pretrain'
+training_algorithm = 'pretrain' # 'init_pop' or 'pretrain'
 #%%
 root_train = 'data_tgff/multiple/train'
 root_dev = 'data_tgff/multiple/test'
@@ -36,7 +36,7 @@ mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 10, 
 mpnn_ptr.to(device)
 #%% load model if saved
 if saved_model_path:
-    mpnn_ptr.load_state_dict(torch.load(sys.argv[5],map_location=device))
+    mpnn_ptr.load_state_dict(torch.load(saved_model_path,map_location=device))
 else:
     mpnn_ptr.apply(init_weights)
 #%% initialize the training algorithm

@@ -188,8 +188,7 @@ class PointerNet(nn.Module):
                 * mask.repeat_interleave(num_samples, dim=0)[:, t]
             log_probs_sum += curr_log_probs
             # decoder_input shape: (batch, input_dim)
-            decoder_input = input.repeat_interleave(num_samples, dim=1)[gather_indices.squeeze(-1),
-                                                                      torch.arange(batch_size * num_samples)]
+            decoder_input = input.repeat_interleave(num_samples, dim=1)[gather_indices.squeeze(-1), torch.arange(batch_size * num_samples)]
             # update the mask_decoding to remove the pointed inputs
             mask_decoding.scatter_(1, gather_indices, 0)
         # assign -1 to the mappings corresponding to the padded values to denote that it is invalid

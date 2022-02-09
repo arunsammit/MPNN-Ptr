@@ -57,6 +57,7 @@ class DistanceMatrix(dict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     def __missing__(self, graph_size):
+        print(f"Generating distance matrix for graph size {graph_size}")
         value = default_distance_matrix(graph_size)
         self[graph_size] = value
         return value
