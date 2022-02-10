@@ -20,13 +20,14 @@ class Trainer:
             data = data.to(self.device)
             optimizer.zero_grad()
             # print(f"devices are: {data.x.device} and {data.edge_index.device} and {data.edge_attr.device} and {data.batch.device}")
-            distance_matrix = distance_matrix_dict[data.num_nodes // data.num_graphs].to(self.device)
+            graph_size = data.num_nodes // data.num_graphs
+            distance_matrix = distance_matrix_dict[graph_size].to(self.device)
             loss, comm_cost_sum = self.train_step(data, distance_matrix)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, norm_type=2)
             optimizer.step()
             epoch_loss += comm_cost_sum
-        return epoch_loss / len(dataloader.dataset)
+        return epoch_loss 
 class TrainerInitPop(Trainer):
     def __init__(self, model, num_samples=9):
         self.num_samples = num_samples
@@ -49,9 +50,11 @@ class TrainerSR(Trainer):
     def train_step(self, data:Data, distance_matrix):
         mappings, ll_sum = self.model(data, self.num_samples)
         comm_cost, baseline = communication_cost_multiple_samples(data.edge_index, data.edge_attr, data.batch, distance_matrix, mappings, self.num_samples, calculate_baseline=True)
+        comm_cost = comm_cost.detach()
+        baseline = baseline.detach()
         penalty_baseline = baseline.repeat(self.num_samples)
-        loss = torch.mean((comm_cost.detach() - penalty_baseline.detach()) * ll_sum)
-        return loss, float(comm_cost.sum())
+        loss = torch.mean((comm_cost - penalty_baseline) * ll_sum)
+        return loss, float(comm_cost.view(self.num_samples, -1).min(dim=0)[0].sum())
 class TrainerEMA(Trainer):
     def __init__(self, model, alpha=0.9):
         self.baseline = None
