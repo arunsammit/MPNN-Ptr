@@ -67,6 +67,6 @@ def create_small_dataset(path_from, path_to, num_graphs):
         torch.save(datalist, os.path.join(path_to, file))
     return
 if __name__ == "__main__":
-    path_from = 'data_tgff/multiple/train/raw'
-    path_to = 'data_tgff/multiple_small/train/raw'
-    create_small_dataset(path_from, path_to, num_graphs=2000)
+    path_from = 'data_tgff/multiple/test/raw'
+    path_to = 'data_tgff/multiple_small/test/raw'
+    create_small_dataset(path_from, path_to, num_graphs=1000)

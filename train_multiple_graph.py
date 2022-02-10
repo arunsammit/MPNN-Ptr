@@ -7,8 +7,6 @@ from utils.datagenerate import generate_distance_matrix, DistanceMatrix
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
-import math
-import sys
 from datetime import datetime
 from graphdataset import MultipleGraphDataset, getDataLoader
 from train.trainers import TrainerInitPop, TrainerSR
@@ -31,8 +29,8 @@ save_folder = Path('models_data_multiple') / "small" # 'models_data_final'
 # %%
 root_train = 'data_tgff/multiple_small/train'
 root_dev = 'data_tgff/multiple_small/test'
-train_good_files = ['traindata_multiple_TGFF_norm_64.pt']
-dev_good_files = ['testdata_multiple_TGFF_norm_64.pt']
+train_good_files = None
+dev_good_files = None
 train_dataloader = getDataLoader(
     root_train, batch_size_train, max_graph_size=max_graph_size, raw_file_names=train_good_files)
 dev_dataloader = getDataLoader(
@@ -85,16 +83,18 @@ for epoch in range(num_epochs):
     loss_list_dev.append(avg_valid_comm_cost)
 # %%
 # save the model
-# torch.save(mpnn_ptr.state_dict(
-# ), f'models_data/model_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
+torch.save(mpnn_ptr.state_dict(
+), f'models_data/model_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
 
 # %%
 # plot loss_list_pre
 fig, ax = plt.subplots()
-ax.plot(loss_list_train)
-ax.plot(loss_list_dev)
+ax.plot(loss_list_train, label='train')
+ax.plot(loss_list_dev, label='dev')
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Communication cost')
+ax.legend()
+#%%
 fig.savefig(f'plots/loss_list_{max_graph_size}_{datetime_suffix}.png', dpi=300)
 
 # %% save the loss list

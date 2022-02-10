@@ -1,1 +1,0 @@
-Epoch: 0/100 Dev Comm cost: 265.293513114965

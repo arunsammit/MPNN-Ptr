@@ -42,7 +42,7 @@ class TrainerInitPop(Trainer):
         comm_cost = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
         penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, samples, self.num_samples - 1)
         loss = torch.mean((comm_cost.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
-        return loss, float(comm_cost.sum())
+        return loss, float(comm_cost.view(self.num_samples, -1).min(dim=0)[0].sum())
 class TrainerSR(Trainer):
     def __init__(self, model, num_samples=8):
         self.num_samples = num_samples
