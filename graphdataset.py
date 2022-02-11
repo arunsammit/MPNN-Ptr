@@ -2,6 +2,7 @@
 import torch
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.data import Data
+from torch.utils.data import Dataset
 from typing import List, Optional, Union, Tuple
 from torch_geometric.loader import DataLoader
 import os
@@ -15,8 +16,13 @@ def get_transform(max_num_nodes=121):
         data_new = Data(x=x, edge_index=data.edge_index, edge_attr=data.edge_attr)
         return data_new
     return transform
-
-class MultipleGraphDataset(InMemoryDataset):
+class SingleSizeGraphDataset(InMemoryDataset):
+    def __init__(self, path):
+        data_list = torch.load(path, map_location=torch.device('cpu'))
+        transform = get_transform(data_list[0].num_nodes)
+        super().__init__(transform = transform)
+        self.data, self.slices = self.collate(data_list)
+class MultiSizeGraphDataset(InMemoryDataset):
     def __init__(self, root, transform=get_transform(), pre_transform=None, pre_filter=None, raw_file_names: Union[str, List[str], Tuple] = None):
         self.raw_file_names = raw_file_names
         self.processed_file_names = ["data.pt", "start_pos_data.pt"]
@@ -24,7 +30,6 @@ class MultipleGraphDataset(InMemoryDataset):
         self.data, self.slices = torch.load(self.processed_paths[0])
         # TODO: think how you can take the below attribute into account when slicing the data 
         self.start_pos_data = torch.load(self.processed_paths[1])
-        self.transform
     @property
     def raw_file_names(self) -> Union[str, List[str], Tuple]:
         return self._raw_file_names
@@ -93,17 +98,18 @@ class BucketSampler(Sampler):
 def getDataLoader(root, batch_size, raw_file_names=None, max_graph_size=121):
     if raw_file_names is None:
         raw_file_names = [f for f in os.listdir(f'{root}/raw') if os.path.isfile(f'{root}/raw/{f}') and int(re.split('_|[.]',f)[-2]) <= max_graph_size]
-    dataset = MultipleGraphDataset(root, raw_file_names=raw_file_names, transform=get_transform(max_num_nodes=max_graph_size))
     if len(raw_file_names) > 1:
+        dataset = MultiSizeGraphDataset(root, raw_file_names=raw_file_names, transform=get_transform(max_num_nodes=max_graph_size))
         sampler = BucketSampler(dataset, batch_size)
+        return DataLoader(dataset, batch_sampler=sampler)
     else:
-        sampler = BatchSampler(SubsetRandomSampler(range(len(dataset))), batch_size, drop_last=False)
-    return DataLoader(dataset, batch_sampler=sampler)
+        dataset = SingleSizeGraphDataset(f'{root}/raw/{raw_file_names[0]}')
+        return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 def main():
     root = 'data_tgff/multiple/train'
     raw_file_names = [f for f in os.listdir(f'{root}/raw') if os.path.isfile(f'{root}/raw/{f}') and f != "train_data.pt" and int(re.split('_|[.]',f)[-2]) <= 121]
-    dataset = MultipleGraphDataset(root, raw_file_names=raw_file_names)
+    dataset = MultiSizeGraphDataset(root, raw_file_names=raw_file_names)
     print(f"{len(dataset)} graphs loaded")
     print(f"{dataset[0]}")
     print(f"{dataset[0].edge_index}")
@@ -128,4 +134,8 @@ if __name__ == '__main__':
     # main()
     # debug_dataset('data_tgff/multiple/train/raw','data_tgff/multiple/train')
     # print(get_good_files('/home/arun/Desktop/train_data/mod_data/'))
-    pass
+    data64_path = 'data_tgff/multiple/train/raw/traindata_multiple_TGFF_norm_64.pt'
+    data64 = SingleSizeGraphDataset(data64_path)
+    dataloader = DataLoader(data64, batch_size=128, shuffle=True)
+    for data in dataloader:
+        print(data)

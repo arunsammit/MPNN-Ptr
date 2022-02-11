@@ -38,9 +38,8 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, devi
     return dataloader, distance_matrices
 
 
-def generate_distance_matrix(n,m):
+def _generate_distance_matrix(n,m, mapping):
     G = nx.generators.lattice.grid_2d_graph(n, m)
-    mapping = {(k, l): m * k + l for k in range(n) for l in range(m)}
     G = nx.relabel_nodes(G, mapping)
     gen = nx.algorithms.shortest_paths.unweighted.all_pairs_shortest_path_length(G)
     D = np.zeros((len(G.nodes), len(G.nodes)))
@@ -48,20 +47,61 @@ def generate_distance_matrix(n,m):
         for j, val in d.items():
             D[i, j] = val
     return torch.from_numpy(D)
-def default_distance_matrix(graph_size):
-    n = math.ceil(math.sqrt(graph_size))
-    m = math.ceil(graph_size/n)
-    return generate_distance_matrix(n, m)
+def generate_distance_matrix(n,m, numbering='default'):
+    """
+    If numbering is 'default' then for n = 4 and m = 4, numbering is like:
+    0  1  2  3  4  
+    5  6  7  8  9  
+    10 11 12 13 14 
+    15 16 17 18 19 
+
+    else if numbering is 'new' then for n = 4 and m = 4, numbering is like:
+    0  1  4  9  16 .  .  .
+    3  2  5  10 17 .  .  .
+    8  7  6  11 18 .  .  .
+    15 14 13 12 19 .  .  .
+    .  .  .  .  .  .  .  .
+    .  .  .  .  .  .  .  .
+    .  .  .  .  .  .  .  .
+    """
+    if numbering == 'default':
+        mapping_func = lambda k, l: m * k + l
+    elif numbering == 'new':
+        mapping_func = lambda k, l: k*(k+2) - l if k > l else l**2 + k
+    else:
+        raise ValueError('numbering must be either default or new')
+    mapping = {(k, l): mapping_func(k, l) for k in range(n) for l in range(m)}    
+    return _generate_distance_matrix(n,m, mapping)
 
 class DistanceMatrix(dict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     def __missing__(self, graph_size):
         print(f"Generating distance matrix for graph size {graph_size}")
-        value = default_distance_matrix(graph_size)
+        n = math.ceil(math.sqrt(graph_size))
+        m = math.ceil(graph_size/n)
+        value = generate_distance_matrix(n, m)
         self[graph_size] = value
         return value
+class DistanceMatrixNew:
+    @staticmethod
+    def is_valid(num_nodes)->bool:
+        n = math.ceil(math.sqrt(num_nodes))
+        m = math.ceil(num_nodes / n)
+        return n * m == num_nodes and abs(n - m) <= 1
+    def __init__(self, max_num_nodes):
+        if not self.is_valid(max_num_nodes):
+            raise ValueError(f"max_num_nodes must be either a perfect square or product of two consecutive integers")
+        n = math.ceil(math.sqrt(max_num_nodes))
+        m = math.ceil(max_num_nodes / n)
+        self.distance_matrix = generate_distance_matrix(n, m, numbering='new')
+        self.max_num_nodes = max_num_nodes
 
+    def __getitem__(self, k:int )->torch.Tensor:
+        if not self.is_valid(k):
+            raise ValueError(f"key must be either a perfect square or product of two consecutive integers")
+        return self.distance_matrix[:k, :k]
+        
 
 # %%
 

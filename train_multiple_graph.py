@@ -3,12 +3,12 @@ from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.data import Data
 from models.mpnn_ptr import MpnnPtr
 from utils.utils import init_weights
-from utils.datagenerate import generate_distance_matrix, DistanceMatrix
+from utils.datagenerate import generate_distance_matrix, DistanceMatrix, DistanceMatrixNew
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from datetime import datetime
-from graphdataset import MultipleGraphDataset, getDataLoader
+from graphdataset import MultiSizeGraphDataset, getDataLoader
 from train.trainers import TrainerInitPop, TrainerSR
 from train.validation import validate_dataloader
 from tqdm.auto import tqdm
@@ -21,16 +21,16 @@ batch_size_dev = 256
 saved_model_path = None
 lr = 0.0001
 lr_decay_gamma = .96
-num_epochs = 100
+num_epochs = 20
 num_samples = 8
 beam_width = 8
-training_algorithm = 'pretrain'  # 'init_pop' or 'pretrain'
+training_algorithm = 'init_pop'  # 'init_pop' or 'pretrain'
 save_folder = Path('models_data_multiple') / "small" # 'models_data_final' 
 # %%
 root_train = 'data_tgff/multiple_small/train'
 root_dev = 'data_tgff/multiple_small/test'
-train_good_files = None
-dev_good_files = None
+train_good_files = None #['traindata_multiple_TGFF_norm_64.pt']
+dev_good_files = ['testdata_multiple_TGFF_norm_64.pt']
 train_dataloader = getDataLoader(
     root_train, batch_size_train, max_graph_size=max_graph_size, raw_file_names=train_good_files)
 dev_dataloader = getDataLoader(
@@ -49,7 +49,7 @@ if training_algorithm == 'init_pop':
     trainer = TrainerInitPop(mpnn_ptr, num_samples + 1)
 elif training_algorithm == 'pretrain':
     trainer = TrainerSR(mpnn_ptr, num_samples)
-distance_matrix_dict = DistanceMatrix()
+distance_matrix_dict = DistanceMatrixNew(max_graph_size) # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=lr)
 lr_schedular = torch.optim.lr_scheduler.StepLR(
     optim, step_size=1, gamma=lr_decay_gamma)
