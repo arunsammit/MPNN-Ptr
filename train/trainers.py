@@ -29,20 +29,23 @@ class Trainer:
             epoch_loss += comm_cost_sum
         return epoch_loss 
 class TrainerInitPop(Trainer):
-    def __init__(self, model, num_samples=9):
+    def __init__(self, model, num_samples=16):
         self.num_samples = num_samples
         super().__init__(model)
     def train_step(self, data:Data, distance_matrix):
-        samples, log_likelihoods_sum = self.model(data, self.num_samples)
+        samples, log_likelihoods_sum = self.model(data, self.num_samples + 1)
         # select the first sample for each graph in the batch
         predicted_mappings = samples[:data.num_graphs]
         log_likelihoods_sum = log_likelihoods_sum[:data.num_graphs]
         # remaining samples for baseline calculation
         samples = samples[data.num_graphs:]
         comm_cost = communication_cost(data.edge_index, data.edge_attr, data.batch, distance_matrix, predicted_mappings)
-        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, samples, self.num_samples - 1)
+        penalty_baseline = calculate_baseline(data.edge_index, data.edge_attr, data.batch, distance_matrix, samples, self.num_samples)
         loss = torch.mean((comm_cost.detach() - penalty_baseline.detach()) * log_likelihoods_sum)
         return loss, float(comm_cost.sum())
+    def train(self, dataloader: DataLoader, distance_matrix_dict, optimizer):
+        self.model.decoding_type = 'sampling'
+        return super().train(dataloader, distance_matrix_dict, optimizer)
 class TrainerSR(Trainer):
     def __init__(self, model, num_samples=8):
         self.num_samples = num_samples
@@ -55,6 +58,9 @@ class TrainerSR(Trainer):
         penalty_baseline = baseline.repeat(self.num_samples)
         loss = torch.mean((comm_cost - penalty_baseline) * ll_sum)
         return loss, float(comm_cost.view(self.num_samples, -1).min(dim=0)[0].sum())
+    def train(self, dataloader:DataLoader, distance_matrix_dict, optimizer):
+        self.model.decoding_type = 'sampling'
+        return super().train(dataloader, distance_matrix_dict, optimizer)
 class TrainerEMA(Trainer):
     def __init__(self, model, alpha=0.9):
         self.baseline = None
@@ -71,6 +77,9 @@ class TrainerEMA(Trainer):
             self.baseline = 0.9 * self.baseline + 0.1 * penalty.mean()
         loss = torch.mean((penalty.detach() - self.baseline.detach()) * log_likelihoods_sum)
         return loss, float(penalty.sum())
+    def train(self, dataloader:DataLoader, distance_matrix_dict, optimizer):
+        self.model.decoding_type = 'sampling'
+        return super().train(dataloader, distance_matrix_dict, optimizer)
 class TrainerGR(Trainer):
     def __init__(self, model, baseline_model, num_batches, stablize_baseline=False):
         self.num_batches = num_batches

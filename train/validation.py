@@ -6,14 +6,18 @@ def validate_dataloader(model, dataloader:DataLoader, distance_matrix_dict, beam
     comm_cost = 0
     for data in dataloader:
         data = data.to(model.device)
+
         graph_size = data.num_nodes // data.num_graphs
         distance_matrix = distance_matrix_dict[graph_size].to(model.device)
+        model.eval()
+        model.decoding_type = 'greedy'
         _, comm_cost_batch = beam_search_data(model, data, distance_matrix, beam_width)
         comm_cost += float(comm_cost_batch.sum())
     return comm_cost 
 def beam_search_data(model, data, distance_matrix, beam_width):
-    model.eval()
-    model.decoding_type = 'greedy'
+    """
+    don't forget to set model.decoding_type = 'greedy' and model.eval() before calling this function
+    """
     with torch.no_grad():
         mappings, _ = model(data, beam_width)
         comm_cost = communication_cost_multiple_samples(data.edge_index, data.edge_attr, data.batch, distance_matrix, mappings, beam_width)

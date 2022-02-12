@@ -17,9 +17,11 @@ def get_transform(max_num_nodes=121):
         return data_new
     return transform
 class SingleSizeGraphDataset(InMemoryDataset):
-    def __init__(self, path):
+    def __init__(self, path, max_num_nodes=None):
         data_list = torch.load(path, map_location=torch.device('cpu'))
-        transform = get_transform(data_list[0].num_nodes)
+        if max_num_nodes is None:
+            max_num_nodes = data_list[0].num_nodes
+        transform = get_transform(max_num_nodes)
         super().__init__(transform = transform)
         self.data, self.slices = self.collate(data_list)
 class MultiSizeGraphDataset(InMemoryDataset):
@@ -103,7 +105,7 @@ def getDataLoader(root, batch_size, raw_file_names=None, max_graph_size=121):
         sampler = BucketSampler(dataset, batch_size)
         return DataLoader(dataset, batch_sampler=sampler)
     else:
-        dataset = SingleSizeGraphDataset(f'{root}/raw/{raw_file_names[0]}')
+        dataset = SingleSizeGraphDataset(f'{root}/raw/{raw_file_names[0]}', max_num_nodes=max_graph_size)
         return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 def main():
