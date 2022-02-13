@@ -16,10 +16,10 @@ from pathlib import Path
 # %% initializing the parameters
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 max_graph_size = 121
-batch_size_train = 128
-batch_size_dev = 256
+batch_size_train = 32
+batch_size_dev = 128
 saved_model_path = None
-lr = 0.001
+lr = 0.0001
 # lr_decay_gamma = .96
 num_epochs = 27
 num_samples = 8
@@ -36,7 +36,8 @@ train_dataloader = getDataLoader(
 dev_dataloader = getDataLoader(
     root_dev, batch_size_dev, max_graph_size=max_graph_size, raw_file_names=dev_good_files)
 # %% initialize the models
-mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
+mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
+                   hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
 mpnn_ptr.to(device)
 # %% load model if saved
 if saved_model_path:
@@ -48,11 +49,11 @@ if training_algorithm == 'init_pop':
     trainer = TrainerInitPop(mpnn_ptr, num_samples)
 elif training_algorithm == 'pretrain':
     trainer = TrainerSR(mpnn_ptr, num_samples)
+distance_matrix_dict = DistanceMatrix()
 # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
-distance_matrix_dict = DistanceMatrixNew(max_graph_size)
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=lr)
 # lr_schedular = torch.optim.lr_scheduler.StepLR(
-    # optim, step_size=1, gamma=lr_decay_gamma)
+# optim, step_size=1, gamma=lr_decay_gamma)
 loss_list_train = []
 loss_list_dev = []
 datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
@@ -64,7 +65,7 @@ loss_list_dev.append(avg_valid_comm_cost)
 print_str = f'Epoch: 0/{num_epochs} Dev Comm cost: {avg_valid_comm_cost}'
 print(print_str)
 f = open(Path(save_folder) / f'{datetime_suffix}_train_loss.txt', 'a')
-f.write(print_str)
+f.write(f"{print_str}\n")
 # %% training starts
 for epoch in range(num_epochs):
     avg_train_comm_cost = trainer.train(
@@ -76,11 +77,11 @@ for epoch in range(num_epochs):
     print_str = f'Epoch: {epoch + 1}/{num_epochs}, Train Comm Cost: {avg_train_comm_cost:.4f}, Dev Comm Cost: {avg_valid_comm_cost:.4f}'
     print(print_str)
     # save the model
-    f.write(print_str)
+    f.write(f"{print_str}\n")
     # torch.save(mpnn_ptr.state_dict(), save_folder /f'mpnn_ptr_{epoch + 1}_{datetime_suffix}.pt')
     loss_list_train.append(avg_train_comm_cost)
     loss_list_dev.append(avg_valid_comm_cost)
-f.close()
+f.flush()
 # %%
 # save the model
 torch.save(mpnn_ptr.state_dict(
@@ -96,7 +97,18 @@ ax.set_ylabel('Communication cost')
 ax.legend()
 # %%
 fig.savefig(f'plots/loss_list_{max_graph_size}_{datetime_suffix}.png', dpi=300)
-
+# %%
+root_test = "data_tgff/multiple/test"
+test_good_files = ['testdata_multiple_TGFF_norm_64.pt']
+test_dataloader = getDataLoader(
+    root_test, batch_size_dev, max_graph_size=max_graph_size, raw_file_names=test_good_files)
+# %%
+avg_test_comm_cost = validate_dataloader(
+    mpnn_ptr, tqdm(test_dataloader, leave=False), distance_matrix_dict, beam_width) / len(test_dataloader.dataset)
+print_str = f'Epoch: {num_epochs}/{num_epochs} Test Comm cost: {avg_test_comm_cost}'
+print(print_str)
+f.write(f"{print_str}\n")
+f.close()
 # %% save the loss list
 torch.save(loss_list_train,
            f'plots/loss_list_train_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
