@@ -26,6 +26,8 @@ num_samples = 8
 beam_width = 8
 training_algorithm = 'init_pop'  # 'init_pop' or 'pretrain'
 save_folder = Path('models_data_multiple') / "small"  # 'models_data_final'
+distance_matrix_dict = DistanceMatrix()
+# DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 # %%
 root_train = 'data_tgff/multiple_small/train'
 root_dev = 'data_tgff/multiple_small/test'
@@ -49,8 +51,6 @@ if training_algorithm == 'init_pop':
     trainer = TrainerInitPop(mpnn_ptr, num_samples)
 elif training_algorithm == 'pretrain':
     trainer = TrainerSR(mpnn_ptr, num_samples)
-distance_matrix_dict = DistanceMatrix()
-# DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=lr)
 # lr_schedular = torch.optim.lr_scheduler.StepLR(
 # optim, step_size=1, gamma=lr_decay_gamma)
