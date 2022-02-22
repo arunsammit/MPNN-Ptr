@@ -13,6 +13,7 @@ from train.trainers import TrainerInitPop, TrainerSR
 from train.validation import validate_dataloader
 from tqdm.auto import tqdm
 from pathlib import Path
+
 # %% initializing the parameters
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 max_graph_size = 121
@@ -25,14 +26,15 @@ num_epochs = 27
 num_samples = 8
 beam_width = 8
 training_algorithm = 'init_pop'  # 'init_pop' or 'pretrain'
-save_folder = Path('models_data_multiple') / "small"  # 'models_data_final'
+root_folder = Path('./models_data_multiple') # to save the trained model, the logs and the validation results
+save_folder = root_folder / "small"  # 'models_data_final'
 distance_matrix_dict = DistanceMatrix()
 # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 # %%
 root_train = 'data_tgff/multiple_small/train'
 root_dev = 'data_tgff/multiple_small/test'
-train_good_files = None  # ['traindata_multiple_TGFF_norm_64.pt']
-dev_good_files = ['testdata_multiple_TGFF_norm_64.pt']
+train_good_files = (None, ['traindata_multiple_TGFF_norm_64.pt'])[0]
+dev_good_files = (None,['testdata_multiple_TGFF_norm_64.pt'])[0]
 train_dataloader = getDataLoader(
     root_train, batch_size_train, max_graph_size=max_graph_size, raw_file_names=train_good_files)
 dev_dataloader = getDataLoader(
@@ -64,28 +66,33 @@ avg_valid_comm_cost = validate_dataloader(
 loss_list_dev.append(avg_valid_comm_cost)
 print_str = f'Epoch: 0/{num_epochs} Dev Comm cost: {avg_valid_comm_cost}'
 print(print_str)
-f = open(Path(save_folder) / f'{datetime_suffix}_train_loss.txt', 'a')
+logs_save_folder = save_folder / "logs"
+logs_save_folder.mkdir(parents=True, exist_ok = True)
+f = open(logs_save_folder / f'{datetime_suffix}_train_loss.txt', 'a')
 f.write(f"{print_str}\n")
+model_save_folder = save_folder / "models_data"
+model_save_folder.mkdir(parents=True, exist_ok=True)
+per_epoch_save_folder = model_save_folder / f'per_epoch'
+per_epoch_save_folder.mkdir(parents=True, exist_ok=True)
 # %% training starts
 for epoch in range(num_epochs):
     avg_train_comm_cost = trainer.train(
         tqdm(train_dataloader, leave=False), distance_matrix_dict, optim) / len(train_dataloader.dataset)
     # lr_schedular.step()
-
     avg_valid_comm_cost = validate_dataloader(
         mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
     print_str = f'Epoch: {epoch + 1}/{num_epochs}, Train Comm Cost: {avg_train_comm_cost:.4f}, Dev Comm Cost: {avg_valid_comm_cost:.4f}'
     print(print_str)
     # save the model
     f.write(f"{print_str}\n")
-    # torch.save(mpnn_ptr.state_dict(), save_folder /f'mpnn_ptr_{epoch + 1}_{datetime_suffix}.pt')
+    torch.save(mpnn_ptr.state_dict(), per_epoch_save_folder /f'mpnn_ptr_{training_algorithm}_{datetime_suffix}_{epoch + 1}.pt')
     loss_list_train.append(avg_train_comm_cost)
     loss_list_dev.append(avg_valid_comm_cost)
 f.flush()
 # %%
 # save the model
 torch.save(mpnn_ptr.state_dict(
-), f'models_data/model_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
+), model_save_folder / f'model_{training_algorithm}_{datetime_suffix}.pt')
 
 # %%
 # plot loss_list_pre
@@ -96,7 +103,9 @@ ax.set_xlabel('Epoch')
 ax.set_ylabel('Communication cost')
 ax.legend()
 # %%
-fig.savefig(f'plots/loss_list_{max_graph_size}_{datetime_suffix}.png', dpi=300)
+plot_save_folder = save_folder / 'plots'
+plot_save_folder.mkdir(parents=True, exist_ok=True)
+fig.savefig(plot_save_folder / f'loss_list_{max_graph_size}_{datetime_suffix}.png', dpi=300)
 # %%
 root_test = "data_tgff/multiple/test"
 test_good_files = ['testdata_multiple_TGFF_norm_64.pt']
@@ -110,6 +119,8 @@ print(print_str)
 f.write(f"{print_str}\n")
 f.close()
 # %% save the loss list
+loss_list_save_folder = save_folder / "loss_list"
+loss_list_save_folder.mkdir(parents=True, exist_ok = True)
 torch.save(loss_list_train,
            f'plots/loss_list_train_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
 torch.save(loss_list_dev,
