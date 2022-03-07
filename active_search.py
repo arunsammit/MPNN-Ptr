@@ -39,7 +39,6 @@ best_mapping = None
 best_cost = float('inf')
 baseline = torch.tensor(0.0)
 data = next(iter(dataloader))
-
 loss_list = []
 num_epochs = args.max_iter
 count_not_decrease = 0
@@ -63,7 +62,7 @@ for epoch in range(num_epochs):
     nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
     optim.step()
     if epoch % 10 == 0:
-        print(f'Epoch: {epoch + 1:4}/{num_epochs}   Min Comm Cost: {penalty[min_penalty]:8.2f}   Avg Comm Cost: {penalty.mean():8.2f}')
+        print(f'Epoch: {epoch + 1:4}/{num_epochs} Min Comm Cost: {penalty[min_penalty]:8.2f}   Avg Comm Cost: {penalty.mean():8.2f}')
     # break the training loop if min_penalty is not decreasing for consecutive 10000 epochs
     if penalty[min_penalty] > best_cost:
         count_not_decrease += 1
@@ -71,7 +70,7 @@ for epoch in range(num_epochs):
         count_not_decrease = 0
     if count_not_decrease > 20000:
         print('Early stopping at epoch {}'.format(epoch))
-        break    
+        break
     loss_list.append(penalty[min_penalty].item())
     # lr_scheduler.step()
 # stop measuring time
@@ -87,4 +86,4 @@ ax.set_title("communication cost v/s number of epochs")  # Add a title to the ax
 fig.savefig(f'./plots/loss_single_uniform_{graph_size}_3.png')  # Save the figure.
 
 # command to run:
-# python3 active_search.py data_tgff/data_single_TGFF1_16.pt --lr 0.002 --pretrained_model_path models_data_final/model_16_01-10.pt --max_iter 5000 --num_samples 2048
+# python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.002 --pretrained_model_path models_data_final/model_16_01-10.pt --max_iter 5000 --num_samples 2048

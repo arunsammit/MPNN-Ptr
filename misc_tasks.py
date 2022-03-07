@@ -51,7 +51,7 @@ def get_good_files(root):
         if is_good:
             good_files.append(file)
     return good_files
-def create_small_dataset(path_from, path_to, num_graphs):
+def create_small_dataset(path_from, path_to, sizes):
     import os
     import random
     Path(path_to).mkdir(parents=True, exist_ok=True)
@@ -59,14 +59,21 @@ def create_small_dataset(path_from, path_to, num_graphs):
         list(filter(lambda f: os.path.isfile(os.path.join(path_from,f)), os.listdir(path_from))), 
         key=lambda f: int(re.split('_|[.]',f)[-2])
     )
+    total_num_graphs = 0
     for file in files:
         datalist = torch.load(os.path.join(path_from, file), map_location=torch.device('cpu'))
-        if len(datalist) > num_graphs:
-            random.shuffle(datalist)
-            datalist = datalist[:num_graphs]
+        curr_size = min(next(sizes), len(datalist))
+        total_num_graphs += curr_size
+        random.shuffle(datalist)
+        datalist = datalist[:curr_size]
         torch.save(datalist, os.path.join(path_to, file))
-    return
+    print(f"{total_num_graphs} graphs in total")
 if __name__ == "__main__":
-    path_from = 'data_tgff/multiple/test/raw'
-    path_to = 'data_tgff/multiple_small/test/raw'
-    create_small_dataset(path_from, path_to, num_graphs=1000)
+    path_from = 'data_tgff/multiple/train/raw'
+    path_to = 'data_tgff/multiple/train_final/raw'
+    def get_sizes(start, diff):
+        x = start
+        while True:
+            yield x
+            x += diff
+    create_small_dataset(path_from, path_to, get_sizes(3000, 3600))

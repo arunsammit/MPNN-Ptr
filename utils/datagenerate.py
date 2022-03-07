@@ -38,8 +38,8 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, devi
     return dataloader, distance_matrices
 
 
-def _generate_distance_matrix(n,m, mapping):
-    G = nx.generators.lattice.grid_2d_graph(n, m)
+def _generate_distance_matrix(dims, mapping):
+    G = nx.grid_graph(dims)
     G = nx.relabel_nodes(G, mapping)
     gen = nx.algorithms.shortest_paths.unweighted.all_pairs_shortest_path_length(G)
     D = np.zeros((len(G.nodes), len(G.nodes)))
@@ -71,13 +71,17 @@ def generate_distance_matrix(n,m, numbering='default'):
     else:
         raise ValueError('numbering must be either default or new')
     mapping = {(k, l): mapping_func(k, l) for k in range(n) for l in range(m)}    
-    return _generate_distance_matrix(n,m, mapping)
+    return _generate_distance_matrix((m,n), mapping)
+def generate_distance_matrix_3D(n, m, l):
+    G = nx.grid_graph(dim=(n, m, l))
+    G = nx.relabel_nodes(G, {(i, j, k): i + j*n + k*m*n for i in range(n) for j in range(m) for k in range(l)})
+
 
 class DistanceMatrix(dict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     def __missing__(self, graph_size):
-        print(f"Generating distance matrix for graph size {graph_size}")
+        # print(f"Generating distance matrix for graph size {graph_size}")
         n = math.ceil(math.sqrt(graph_size))
         m = math.ceil(graph_size/n)
         value = generate_distance_matrix(n, m)

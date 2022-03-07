@@ -3,7 +3,7 @@ from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.data import Data
 from models.mpnn_ptr import MpnnPtr
 from utils.utils import init_weights
-from utils.datagenerate import generate_distance_matrix, DistanceMatrix, DistanceMatrixNew
+from utils.datagenerate import DistanceMatrix, DistanceMatrixNew
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
@@ -31,8 +31,8 @@ save_folder = root_folder / "small"  # 'models_data_final'
 distance_matrix_dict = DistanceMatrix()
 # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 # %%
-root_train = 'data_tgff/multiple_small/train'
-root_dev = 'data_tgff/multiple_small/test'
+root_train = 'data_tgff/multiple/train_final'
+root_dev = 'data_tgff/multiple/test'
 train_good_files = (None, ['traindata_multiple_TGFF_norm_64.pt'])[0]
 dev_good_files = (None,['testdata_multiple_TGFF_norm_64.pt'])[0]
 train_dataloader = getDataLoader(
@@ -88,7 +88,7 @@ for epoch in range(num_epochs):
     torch.save(mpnn_ptr.state_dict(), per_epoch_save_folder /f'mpnn_ptr_{training_algorithm}_{datetime_suffix}_{epoch + 1}.pt')
     loss_list_train.append(avg_train_comm_cost)
     loss_list_dev.append(avg_valid_comm_cost)
-f.flush()
+    f.flush()
 # %%
 # save the model
 torch.save(mpnn_ptr.state_dict(
@@ -102,16 +102,16 @@ ax.plot(loss_list_dev, label='dev')
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Communication cost')
 ax.legend()
-# %%
+# %% 
 plot_save_folder = save_folder / 'plots'
 plot_save_folder.mkdir(parents=True, exist_ok=True)
 fig.savefig(plot_save_folder / f'loss_list_{max_graph_size}_{datetime_suffix}.png', dpi=300)
-# %%
+# %% 
 root_test = "data_tgff/multiple/test"
 test_good_files = ['testdata_multiple_TGFF_norm_64.pt']
 test_dataloader = getDataLoader(
     root_test, batch_size_dev, max_graph_size=max_graph_size, raw_file_names=test_good_files)
-# %%
+# %% 
 avg_test_comm_cost = validate_dataloader(
     mpnn_ptr, tqdm(test_dataloader, leave=False), distance_matrix_dict, beam_width) / len(test_dataloader.dataset)
 print_str = f'Epoch: {num_epochs}/{num_epochs} Test Comm cost: {avg_test_comm_cost}'
