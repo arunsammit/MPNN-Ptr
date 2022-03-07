@@ -73,9 +73,8 @@ def generate_distance_matrix(n,m, numbering='default'):
     mapping = {(k, l): mapping_func(k, l) for k in range(n) for l in range(m)}    
     return _generate_distance_matrix((m,n), mapping)
 def generate_distance_matrix_3D(n, m, l):
-    G = nx.grid_graph(dim=(n, m, l))
-    G = nx.relabel_nodes(G, {(i, j, k): i + j*n + k*m*n for i in range(n) for j in range(m) for k in range(l)})
-
+    mapping = {(i, j, k): i + j*n + k*m*n for i in range(n) for j in range(m) for k in range(l)}
+    return _generate_distance_matrix((l, m, n), mapping)
 
 class DistanceMatrix(dict):
     def __init__(self, *args, **kwargs):

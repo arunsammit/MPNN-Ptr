@@ -1,5 +1,5 @@
 
-from utils.datagenerate import generate_distance_matrix
+from utils.datagenerate import generate_distance_matrix, generate_distance_matrix_3D
 import math
 import torch
 from torch_geometric.loader import DataLoader
@@ -17,6 +17,7 @@ parser.add_argument('--max_iter', help='max iterations', type=int, default=10000
 parser.add_argument('--num_samples', help='number of unique solutions to be sampled in each iteration', type=int, default=128)
 parser.add_argument('--pretrained_model_path', help='path to pretrained model', type=str, default=None)
 parser.add_argument('--lr', help='learning rate', type=float, default=0.001)
+parser.add_argument('--three_D', help='use a fully connected 3D NoC with 2 layers in the Z direction', action='store_true')
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,10 +26,16 @@ graph_size = data.num_nodes
 num_samples = args.num_samples
 datalist = [data]
 dataloader = DataLoader(datalist, batch_size=1)
-n = math.ceil(math.sqrt(graph_size))
-m = math.ceil(graph_size / n)
-distance_matrix = generate_distance_matrix(n,m).to(device)
-mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True, feature_scale=290, decoding_type='greedy')
+if args.three_D:
+    n = math.ceil(math.sqrt(graph_size/2))
+    m = math.ceil(graph_size/ (n * 2))
+    l = 2
+    distance_matrix = generate_distance_matrix_3D(n, m, l).to(device)
+else:
+    n = math.ceil(math.sqrt(graph_size))
+    m = math.ceil(graph_size / n)
+    distance_matrix = generate_distance_matrix(n,m).to(device)
+mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True, feature_scale=290, decoding_type='sampling')
 if args.pretrained_model_path is not None:
     mpnn_ptr.load_state_dict(torch.load(args.pretrained_model_path, map_location=device))
 mpnn_ptr.to(device)
@@ -77,6 +84,7 @@ for epoch in range(num_epochs):
 end = timer()
 torch.save(mpnn_ptr.state_dict(), f'./models_data/model_single_uniform_{graph_size}.pt')
 print(f'Best cost: {best_cost}, time taken: {end - start}')
+print(f'Best mapping: {best_mapping}')
 # plot loss vs epoch
 fig, ax = plt.subplots()  # Create a figure and an axes.
 ax.plot(loss_list)  # Plot some data on the axes.
@@ -85,5 +93,7 @@ ax.set_ylabel('communication cost')  # Add a y-label to the axes.
 ax.set_title("communication cost v/s number of epochs")  # Add a title to the axes
 fig.savefig(f'./plots/loss_single_uniform_{graph_size}_3.png')  # Save the figure.
 
-# command to run:
-# python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.002 --pretrained_model_path models_data_final/model_16_01-10.pt --max_iter 5000 --num_samples 2048
+# command to run with pretrained model:
+# python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.002 --pretrained_model_path models_data_final/model_16_01-10.pt --max_iter 5000 --num_samples 2048 --three_D
+# command to run without pretrained model:
+# python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.0001 --max_iter 5000 --num_samples 2048 --three_D

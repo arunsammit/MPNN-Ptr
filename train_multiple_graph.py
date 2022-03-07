@@ -107,17 +107,17 @@ plot_save_folder = save_folder / 'plots'
 plot_save_folder.mkdir(parents=True, exist_ok=True)
 fig.savefig(plot_save_folder / f'loss_list_{max_graph_size}_{datetime_suffix}.png', dpi=300)
 # %% 
-root_test = "data_tgff/multiple/test"
-test_good_files = ['testdata_multiple_TGFF_norm_64.pt']
-test_dataloader = getDataLoader(
-    root_test, batch_size_dev, max_graph_size=max_graph_size, raw_file_names=test_good_files)
-# %% 
-avg_test_comm_cost = validate_dataloader(
-    mpnn_ptr, tqdm(test_dataloader, leave=False), distance_matrix_dict, beam_width) / len(test_dataloader.dataset)
-print_str = f'Epoch: {num_epochs}/{num_epochs} Test Comm cost: {avg_test_comm_cost}'
-print(print_str)
-f.write(f"{print_str}\n")
-f.close()
+# root_test = "data_tgff/multiple/test"
+# test_good_files = ['testdata_multiple_TGFF_norm_64.pt']
+# test_dataloader = getDataLoader(
+#     root_test, batch_size_dev, max_graph_size=max_graph_size, raw_file_names=test_good_files)
+# # %% 
+# avg_test_comm_cost = validate_dataloader(
+#     mpnn_ptr, tqdm(test_dataloader, leave=False), distance_matrix_dict, beam_width) / len(test_dataloader.dataset)
+# print_str = f'Epoch: {num_epochs}/{num_epochs} Test Comm cost: {avg_test_comm_cost}'
+# print(print_str)
+# f.write(f"{print_str}\n")
+# f.close()
 # %% save the loss list
 loss_list_save_folder = save_folder / "loss_list"
 loss_list_save_folder.mkdir(parents=True, exist_ok = True)

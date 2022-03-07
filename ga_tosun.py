@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import math
 from utils.utils import communication_cost_multiple_samples
-from utils.datagenerate import generate_distance_matrix
+from utils.datagenerate import generate_distance_matrix, generate_distance_matrix_3D
 from torch_geometric.loader import DataLoader
 from numba import njit
 from models.mpnn_ptr import MpnnPtr
@@ -70,17 +70,23 @@ def mutation(prtls):
 #%%
 class GA:
     def __init__(self, dataset_path, num_particles,\
-        max_iterations, prtl_init_method="random", model_path=None):
+        max_iterations, prtl_init_method="random", model_path=None, use_3d=False):
         device = torch.device("cpu")
         single_graph_data = torch.load(dataset_path, map_location=device)
         graph_size = single_graph_data.num_nodes
-        n = math.ceil(math.sqrt(graph_size))
-        m = math.ceil(graph_size/n)
         datalist = [single_graph_data]
         # just for using communication_cost function
         dataloader = DataLoader(datalist, batch_size=1)
         self.data = next(iter(dataloader))
-        self.distance_matrix = generate_distance_matrix(n,m).to(device)
+        if use_3d:
+            n = math.ceil(math.sqrt(graph_size // 2))
+            m = math.ceil(graph_size // (2 * n))
+            l = 2
+            self.distance_matrix = generate_distance_matrix_3D(n, m, l).to(device)
+        else: 
+            n = math.ceil(math.sqrt(graph_size))
+            m = math.ceil(graph_size/n)
+            self.distance_matrix = generate_distance_matrix(n,m).to(device)
         self.max_iterations = max_iterations
         self.num_particles = num_particles
         self.particle_size = graph_size
@@ -170,9 +176,10 @@ if __name__ == "__main__":
     parser.add_argument('-p','--num_prtl', help="number of particles in each generation", type=int, default=100)
     parser.add_argument('-i','--max_iter', help="max number of iterations", type=int, default=1000)
     parser.add_argument('-m','--model', help="path to the model file for initial population generation", type=str, default=None)
+    parser.add_argument('--three_D', help='use a fully connected 3D NoC with 2 layers in the Z direction', action='store_true')
     args = parser.parse_args()
     prtl_init_method = "random" if args.model is None else "model"
-    ga = GA(args.dataset, args.num_prtl, args.max_iter, prtl_init_method, args.model)
+    ga = GA(args.dataset, args.num_prtl, args.max_iter, prtl_init_method, args.model, args.three_D)
     best_prtl,cost = ga.run()
     print(f'best particle {best_prtl}')
     print(f'best cost {cost}')
@@ -193,4 +200,4 @@ if __name__ == "__main__":
     # print(f'Time taken to run the algorithm: {best_time}')
     # print(f'Best cost: {best_cost}')
 # command to run the code:
-# python3 ga_tosun.py data_tgff/data_single_TGFF1_16.pt --num_prtl 1024 --max_iter 5000 --model models_data_final/model_16_01-10.pt
+# python3 ga_tosun.py data_tgff/single/traffic_32.pt --num_prtl 1024 --max_iter 5000 --model models_data_final/model_16_01-10.pt
