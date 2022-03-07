@@ -8,7 +8,7 @@ import torch_geometric
 class MpnnPtr(nn.Module):
     def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True, decoding_type='sampling', feature_scale=1.0):
         # K is number of rounds of message passing
-        super(  , self).__init__()
+        super(MpnnPtr, self).__init__()
         self.mpnn = Mpnn(input_dim, embedding_dim, K)
         self.device = device
         self.logit_clipping = logit_clipping
