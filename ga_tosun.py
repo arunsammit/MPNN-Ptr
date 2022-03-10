@@ -181,7 +181,8 @@ if __name__ == "__main__":
     prtl_init_method = "random" if args.model is None else "model"
     ga = GA(args.dataset, args.num_prtl, args.max_iter, prtl_init_method, args.model, args.three_D)
     best_prtl,cost = ga.run()
-    print(f'best particle {best_prtl}')
+    print(f'best particle\n')
+    print(f'{torch.tensor(best_prtl)}')
     print(f'best cost {cost}')
     # measure time taken and best cost by running the algorithm 5 times
     # best_cost = float('inf')
@@ -199,5 +200,7 @@ if __name__ == "__main__":
     #         best_time = time_taken
     # print(f'Time taken to run the algorithm: {best_time}')
     # print(f'Best cost: {best_cost}')
-# command to run the code:
+# command to run the code for initial population generation algorithm
 # python3 ga_tosun.py data_tgff/single/traffic_32.pt --num_prtl 1024 --max_iter 5000 --model models_data_final/model_16_01-10.pt
+# command to run the code for 3D NoC
+# python3 ga_tosun.py data_tgff/single/traffic_32.pt --num_prtl 1024 --max_iter 5000 --three_D
