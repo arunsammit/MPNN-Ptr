@@ -79,11 +79,13 @@ class GA:
         dataloader = DataLoader(datalist, batch_size=1)
         self.data = next(iter(dataloader))
         if use_3d:
+            print("Using 3D distance matrix")
             n = math.ceil(math.sqrt(graph_size // 2))
             m = math.ceil(graph_size // (2 * n))
             l = 2
             self.distance_matrix = generate_distance_matrix_3D(n, m, l).to(device)
         else: 
+            print("Using 2D distance matrix")
             n = math.ceil(math.sqrt(graph_size))
             m = math.ceil(graph_size/n)
             self.distance_matrix = generate_distance_matrix(n,m).to(device)

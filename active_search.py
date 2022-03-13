@@ -29,7 +29,7 @@ def load_and_process_data(dataset_path, device = torch.device("cpu")):
     return data
 #%%
 def load_model(graph_size, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None):
-    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=2, p_dropout=0.1, device=device, logit_clipping=True, feature_scale=feature_scale, decoding_type='sampling')
+    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=1, p_dropout=0.1, device=device, logit_clipping=False, feature_scale=feature_scale, decoding_type='sampling')
     if pretrained_model_path is not None:
         mpnn_ptr.load_state_dict(torch.load(pretrained_model_path, map_location=device))
     mpnn_ptr.to(device)
@@ -51,7 +51,7 @@ else:
 mpnn_ptr = load_model(graph_size, device, feature_scale=1, pretrained_model_path=args.pretrained_model_path)
 mpnn_ptr.train()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=args.lr)
-lr_scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=100, gamma=0.93)
+# lr_scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=100, gamma=0.93)
 best_mapping = None
 best_cost = float('inf')
 baseline = torch.tensor(0.0)
@@ -63,7 +63,7 @@ start = timer()
 for epoch in range(num_epochs):
     mpnn_ptr.train()
     mpnn_ptr.decoding_type = 'sampling'
-    predicted_mappings, log_likelihood_sum = mpnn_ptr(data, num_samples)
+    predicted_mappings, log_probs = mpnn_ptr(data, num_samples)
     penalty = communication_cost_multiple_samples(data.edge_index, 
         data.edge_attr, data.batch, distance_matrix, predicted_mappings, num_samples)
     min_penalty = torch.argmin(penalty)
@@ -74,7 +74,7 @@ for epoch in range(num_epochs):
     baseline = penalty.mean()
     # else:
     #     baseline = 0.9 * baseline + 0.1 * penalty.mean()
-    loss = torch.mean((penalty.detach() - baseline.detach())*log_likelihood_sum)
+    loss = torch.mean((penalty.detach() - baseline.detach())*log_probs)
     optim.zero_grad()
     loss.backward()
     nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
@@ -97,12 +97,15 @@ for epoch in range(num_epochs):
         print('Early stopping at epoch {}'.format(epoch))
         break
     loss_list.append(penalty[min_penalty].item())
-    lr_scheduler.step()
+    # lr_scheduler.step()
 # stop measuring time
 # use the model with the best cost to do greedy beam search
 mpnn_ptr.eval()
 mpnn_ptr.decoding_type = 'greedy'
-predicted_mappings, log_likelihood_sum = mpnn_ptr(data, 3000)
+mapping, cost = beam_search_data(mpnn_ptr, data, distance_matrix, 3072)
+if cost < best_cost:
+    best_cost = float(cost)
+    best_mapping = mapping[0]
 end = timer()
 torch.save(mpnn_ptr.state_dict(), f'./models_data/model_single_uniform_{graph_size}.pt')
 print(f'Best cost: {best_cost}, time taken: {end - start}')

@@ -19,15 +19,16 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 max_graph_size = 121
 batch_size_train = 32
 batch_size_dev = 128
-saved_model_path = None
-lr = 0.0001
+# change the number to 0 to use a random initialize model parameters
+saved_model_path = 'models_data_multiple/full/models_data/model_init_pop_03-08_19-57.pt'
+lr = 0.00001
 # lr_decay_gamma = .96
-num_epochs = 27
+num_epochs = 10 #27
 num_samples = 8
 beam_width = 8
 training_algorithm = 'init_pop'  # 'init_pop' or 'pretrain'
 root_folder = Path('./models_data_multiple') # to save the trained model, the logs and the validation results
-save_folder = root_folder / "small"  # 'models_data_final'
+save_folder = root_folder / "full"  # 'models_data_final'
 distance_matrix_dict = DistanceMatrix()
 # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 # %%
@@ -122,7 +123,7 @@ fig.savefig(plot_save_folder / f'loss_list_{max_graph_size}_{datetime_suffix}.pn
 loss_list_save_folder = save_folder / "loss_list"
 loss_list_save_folder.mkdir(parents=True, exist_ok = True)
 torch.save(loss_list_train,
-           f'plots/loss_list_train_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
+           loss_list_save_folder / f'loss_list_train_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
 torch.save(loss_list_dev,
-           f'plots/loss_list_dev_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
+           loss_list_save_folder / f'loss_list_dev_{training_algorithm}_{max_graph_size}_{datetime_suffix}.pt')
 # %%

@@ -1,6 +1,7 @@
+#%%
 import torch
 import torch.nn.functional as F
-
+#%%
 
 def gumbel_like(*args, **kwargs):
     return _gumbel(torch.rand_like(*args, **kwargs))
@@ -33,10 +34,11 @@ def gumbel_with_maximum(phi, T, dim=-1):
     g_phi = phi + gumbel_like(phi)
     Z, argmax = g_phi.max(dim)
     g = _shift_gumbel_maximum(g_phi, T, dim, Z=Z)
-    CHECK_VALIDITY = True
+    CHECK_VALIDITY = False
     if CHECK_VALIDITY:
         g_inv = _shift_gumbel_maximum(g, Z, dim)
         assert (((g_phi - g_inv) < 1e-3) | (g_phi == g_inv)).all()
+    g[phi == -float('inf')] = -float('inf')
     return g, argmax
 
 
@@ -45,3 +47,5 @@ def _shift_gumbel_maximum(g_phi, T, dim=-1, Z=None):
         Z, _ = g_phi.max(dim)
     u = T.unsqueeze(dim) - g_phi + torch.log1p(-torch.exp(g_phi - Z.unsqueeze(dim)))
     return T.unsqueeze(dim) - F.relu(u) - torch.log1p(torch.exp(-u.abs()))
+
+# %%

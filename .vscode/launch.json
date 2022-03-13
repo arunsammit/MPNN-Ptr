@@ -30,6 +30,12 @@
             "module": "utils.utils"
         },
         {
+            "name": "Python: Module seqToseq",
+            "type": "python",
+            "request": "launch",
+            "module": "models.seqToseq"
+        },
+        {
             "name": "Python: Attach",
             "type": "python",
             "request": "attach",

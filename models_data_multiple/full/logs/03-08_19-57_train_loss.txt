@@ -1,0 +1,11 @@
+Epoch: 0/10 Dev Comm cost: 117.1203011823925
+Epoch: 1/10, Train Comm Cost: 157.5277, Dev Comm Cost: 115.7598
+Epoch: 2/10, Train Comm Cost: 157.1222, Dev Comm Cost: 115.5678
+Epoch: 3/10, Train Comm Cost: 156.9428, Dev Comm Cost: 115.4497
+Epoch: 4/10, Train Comm Cost: 156.8132, Dev Comm Cost: 115.4241
+Epoch: 5/10, Train Comm Cost: 156.6857, Dev Comm Cost: 115.3252
+Epoch: 6/10, Train Comm Cost: 156.6023, Dev Comm Cost: 115.3004
+Epoch: 7/10, Train Comm Cost: 156.5021, Dev Comm Cost: 115.3258
+Epoch: 8/10, Train Comm Cost: 156.4471, Dev Comm Cost: 115.1289
+Epoch: 9/10, Train Comm Cost: 156.3556, Dev Comm Cost: 115.1001
+Epoch: 10/10, Train Comm Cost: 156.3401, Dev Comm Cost: 115.1069
