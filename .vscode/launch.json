@@ -62,8 +62,13 @@
             "request": "launch",
             "program": "${workspaceFolder}/active_search.py",
             "args": [
-                "./data/data_single_instance_uniform_64.pt",
-                "128"
+                "data_tgff/single/traffic_32.pt", 
+                "--lr",
+                "0.001",
+                "--max_iter",
+                "5000", 
+                "--num_samples",
+                "1024"
             ],
             "console": "integratedTerminal",
         }

@@ -3,7 +3,7 @@ from torch import Tensor, nn
 import torch
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
-from gumbel import gumbel_with_maximum
+from gumbel import gumbel_like, gumbel_with_maximum
 
 def rearrange(x:torch.Tensor, beams_buf:torch.Tensor)->torch.Tensor:
     batch_size, num_samples = beams_buf.size()
@@ -147,23 +147,26 @@ class PointerNet(nn.Module):
             # log_probs shape: (batch * num_samples, seq_len)
             if t == 0:
                 # log_probs shape: (batch , seq_len)
-                if self.decoding_type == 'sampling':
-                # selected_indices shape: (batch * num_samples,)
-                    scores, _ = gumbel_with_maximum(log_probs, torch.zeros(log_probs.shape[:-1],device=self.device))
-                    # scores shape: (batch * num_samples, seq_len)
-                elif self.decoding_type == 'greedy':
-                    scores = log_probs
-                _, selected_indices = torch.topk(scores, min(num_samples, scores.size(-1)), dim=-1)
-                # selected_indices shape: (batch, min(num_samples, seq_len))
-                if num_samples > log_probs.size(1):
-                    # pad second dimension with -1 so that the shape becomes (batch, num_samples)
-                    selected_indices = F.pad(selected_indices, (0, num_samples - scores.size(1)), 'constant', -1)
-                selected_indices = selected_indices.view(-1)
+                if self.decoding_type != 'sampling':
+                    if self.decoding_type == 'sampling-w/o-replacement':
+                    # selected_indices shape: (batch * num_samples,)
+                        scores = log_probs + gumbel_like(log_probs)
+                        # scores shape: (batch * num_samples, seq_len)
+                    elif self.decoding_type == 'greedy':
+                        scores = log_probs
+                    _, selected_indices = torch.topk(scores, min(num_samples, scores.size(-1)), dim=-1)
+                    # selected_indices shape: (batch, min(num_samples, seq_len))
+                    if num_samples > log_probs.size(1):
+                        # pad second dimension with -1 so that the shape becomes (batch, num_samples)
+                        selected_indices = F.pad(selected_indices, (0, num_samples - scores.size(1)), 'constant', -1)
+                    selected_indices = selected_indices.view(-1)
+                else:
+                    selected_indices = torch.multinomial(log_probs.exp(), num_samples, replacement=True).long().view(-1)
                 log_probs = log_probs.repeat_interleave(num_samples, dim=0)
                 # make log_probs -inf for the values which are -1 in selected_indices
                 log_probs = log_probs.masked_fill((selected_indices == -1)\
                     .unsqueeze(-1), float('-inf'))
-                if self.decoding_type == 'sampling':
+                if self.decoding_type == 'sampling-w/o-replacement':
                     scores = scores.repeat_interleave(num_samples, dim=0)
                     scores = scores.masked_fill((selected_indices == -1)\
                         .unsqueeze(-1), float('-inf'))
@@ -173,32 +176,35 @@ class PointerNet(nn.Module):
                 cell = cell.repeat_interleave(num_samples, dim=1)
                 encoder_outputs = encoder_outputs.repeat_interleave(num_samples, dim=1)
             else:
-                if self.decoding_type == 'sampling':
-                    scores, _ = gumbel_with_maximum(log_probs + log_probs_sum.unsqueeze(-1), g_log_probs)
-                    
-                elif self.decoding_type == 'greedy':
-                    scores = log_probs + log_probs_sum.unsqueeze(-1) 
-                scores_per_batch = scores.view(batch_size, -1)
-                _, indices_buf = torch.topk(scores_per_batch, num_samples, dim=1)
-                # indices_buf shape: (batch, min(num_samples, scores.size(1)))
-                beams_buf = torch.div(indices_buf, seq_len,rounding_mode='floor')
-                indices_buf = indices_buf.fmod(seq_len)
-                selected_indices = indices_buf.view(-1)
-                predicted_mappings[:,:t] = rearrange(predicted_mappings[:,:t], beams_buf)
-                log_probs_sum = rearrange(log_probs_sum, beams_buf)
-                mask_decoding = rearrange(mask_decoding, beams_buf)
-                log_probs = rearrange(log_probs, beams_buf)
-                hidden = rearrange(hidden, beams_buf)
-                cell = rearrange(cell, beams_buf)
-                if self.decoding_type == 'sampling':
-                    scores = rearrange(scores, beams_buf)
+                if self.decoding_type != 'sampling':
+                    if self.decoding_type == 'sampling-w/o-replacement':
+                        scores, _ = gumbel_with_maximum(log_probs + log_probs_sum.unsqueeze(-1), g_log_probs)
+                        
+                    elif self.decoding_type == 'greedy':
+                        scores = log_probs + log_probs_sum.unsqueeze(-1) 
+                    scores_per_batch = scores.view(batch_size, -1)
+                    _, indices_buf = torch.topk(scores_per_batch, num_samples, dim=1)
+                    # indices_buf shape: (batch, min(num_samples, scores.size(1)))
+                    beams_buf = torch.div(indices_buf, seq_len,rounding_mode='floor')
+                    indices_buf = indices_buf.fmod(seq_len)
+                    selected_indices = indices_buf.view(-1)
+                    predicted_mappings[:,:t] = rearrange(predicted_mappings[:,:t], beams_buf)
+                    log_probs_sum = rearrange(log_probs_sum, beams_buf)
+                    mask_decoding = rearrange(mask_decoding, beams_buf)
+                    log_probs = rearrange(log_probs, beams_buf)
+                    hidden = rearrange(hidden, beams_buf)
+                    cell = rearrange(cell, beams_buf)
+                    if self.decoding_type == 'sampling-w/o-replacement':
+                        scores = rearrange(scores, beams_buf)
+                else:
+                    selected_indices = torch.multinomial(log_probs.exp(), 1).long().squeeze(1)
             predicted_mappings[:, t] = selected_indices
             gather_indices = selected_indices.unsqueeze(-1).clone()
             gather_indices[gather_indices == -1] = 0 
             curr_log_probs = log_probs.gather(1, gather_indices).squeeze(-1) \
                 * mask.repeat_interleave(num_samples, dim=0)[:, t]
             log_probs_sum += curr_log_probs
-            if self.decoding_type == 'sampling':
+            if self.decoding_type == 'sampling-w/o-replacement':
                 # gumbel perturbed log probabilities of partial sequences
                 g_log_probs = scores.gather(1, gather_indices).squeeze(-1) \
                     * mask.repeat_interleave(num_samples, dim=0)[:, t]
@@ -212,7 +218,7 @@ class PointerNet(nn.Module):
         # predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len)
         predicted_mappings = predicted_mappings.view(batch_size, num_samples, seq_len).transpose(0, 1).reshape(-1,seq_len)
         log_probs_sum = log_probs_sum.view(batch_size, num_samples).transpose(0, 1).reshape(-1)
-        if self.decoding_type == 'sampling':
+        if self.decoding_type == 'sampling-w/o-replacement':
             g_log_probs = g_log_probs.view(batch_size, num_samples).transpose(0, 1).reshape(-1)
             return predicted_mappings, log_probs_sum, g_log_probs
         else:

@@ -27,14 +27,7 @@ class MpnnPtr(nn.Module):
         batched_embeddings, mask = torch_geometric.utils.to_dense_batch(embeddings, data.batch)
         # batched_embeddings shape: (batch_size, max_num_nodes, embedding_dim)
         # pass embeddings and mask through PointerNet to get pointer
-        if self.decoding_type == 'sampling':
-            mappings, log_probs, log_g_probs = self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
-            return mappings, log_probs, log_g_probs
-        elif self.decoding_type == 'greedy':
-            mappings, log_probs = self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
-            return mappings, log_probs
-        else:
-            raise ValueError('decoding_type must be "sampling" or "greedy"')
+        return self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
 def main():
     from utils.datagenerate import generate_graph_data_list
     from utils.datagenerate import generate_graph_data_loader_with_distance_matrix

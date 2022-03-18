@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from train.validation import beam_search_data
 from timeit import default_timer as timer
 import argparse
+from gumbel import gumbel_log_survival
 #%%
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', help='path to dataset', type=str)
@@ -54,7 +55,6 @@ optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=args.lr)
 # lr_scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=100, gamma=0.93)
 best_mapping = None
 best_cost = float('inf')
-baseline = torch.tensor(0.0)
 loss_list = []
 num_epochs = args.max_iter
 count_not_decrease = 0
@@ -62,19 +62,26 @@ count_not_decrease = 0
 start = timer()
 for epoch in range(num_epochs):
     mpnn_ptr.train()
-    mpnn_ptr.decoding_type = 'sampling'
-    predicted_mappings, log_probs = mpnn_ptr(data, num_samples)
+    mpnn_ptr.decoding_type = 'sampling-w/o-replacement'
+    mappings, log_probs, g_log_probs = mpnn_ptr(data, num_samples + 1)
     penalty = communication_cost_multiple_samples(data.edge_index, 
-        data.edge_attr, data.batch, distance_matrix, predicted_mappings, num_samples)
+        data.edge_attr, data.batch, distance_matrix, mappings, num_samples + 1)
+    # take the value of the last sample for threshold
+    threshold = g_log_probs[-1]
+    mappings = mappings[:-1, :]
+    log_probs = log_probs[:-1]
+    g_log_probs = g_log_probs[:-1]
+    penalty = penalty[:-1]
+    log_q = gumbel_log_survival(threshold - g_log_probs).detach()
+    log_importance = log_probs - log_q
+    b_s = torch.sum(torch.exp(log_importance) * penalty).detach()
+    w_s = torch.sum(torch.exp(log_importance)).detach()
+    wi_s = (w_s - torch.exp(log_importance) +  torch.exp(log_probs)).detach()
     min_penalty = torch.argmin(penalty)
     if penalty[min_penalty] < best_cost:
         best_cost = penalty[min_penalty]
-        best_mapping = predicted_mappings[min_penalty]
-    # if epoch == 0:
-    baseline = penalty.mean()
-    # else:
-    #     baseline = 0.9 * baseline + 0.1 * penalty.mean()
-    loss = torch.mean((penalty.detach() - baseline.detach())*log_probs)
+        best_mapping = mappings[min_penalty]
+    loss = torch.sum((1/wi_s) * torch.exp(log_importance) * (penalty - b_s / w_s))
     optim.zero_grad()
     loss.backward()
     nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
@@ -86,14 +93,15 @@ for epoch in range(num_epochs):
         if cost < best_cost:
             best_cost = float(cost)
             best_mapping = mapping[0]
-        print(f'Epoch: {epoch + 1:4}/{num_epochs} Min Comm Cost: {best_cost:8.2f}   Avg Comm Cost: {penalty.mean():8.2f}')
+        print(f'Epoch: {epoch + 1:4}/{num_epochs} Min Comm Cost: {best_cost:8.2f}   Avg Comm Cost: {b_s:8.2f}')
+        print(f'{best_mapping}')
 
-    # break the training loop if min_penalty is not decreasing for consecutive 10000 epochs
+    # break the training loop if min_penalty is not decreasing for consecutive 2000 epochs
     if penalty[min_penalty] > best_cost:
         count_not_decrease += 1
     else:
         count_not_decrease = 0
-    if count_not_decrease > 4000:
+    if count_not_decrease > 2000:
         print('Early stopping at epoch {}'.format(epoch))
         break
     loss_list.append(penalty[min_penalty].item())
