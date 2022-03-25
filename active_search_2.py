@@ -2,6 +2,7 @@
 from utils.datagenerate import generate_distance_matrix, generate_distance_matrix_3D
 import math
 import torch
+import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from models.mpnn_ptr import MpnnPtr
 from utils.utils import  communication_cost_multiple_samples
@@ -30,7 +31,7 @@ def load_and_process_data(dataset_path, device = torch.device("cpu")):
     return data
 #%%
 def load_model(graph_size, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None):
-    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False, feature_scale=feature_scale, decoding_type='sampling')
+    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False, feature_scale=feature_scale)
     if pretrained_model_path is not None:
         mpnn_ptr.load_state_dict(torch.load(pretrained_model_path, map_location=device))
     mpnn_ptr.to(device)
@@ -64,24 +65,23 @@ for epoch in range(num_epochs):
     mpnn_ptr.train()
     mpnn_ptr.decoding_type = 'sampling-w/o-replacement'
     mappings, log_probs, g_log_probs = mpnn_ptr(data, num_samples + 1)
-    penalty = communication_cost_multiple_samples(data.edge_index, 
-        data.edge_attr, data.batch, distance_matrix, mappings, num_samples + 1)
-    # take the value of the last sample for threshold
-    threshold = g_log_probs[-1]
     mappings = mappings[:-1, :]
+    threshold = g_log_probs[-1]
     log_probs = log_probs[:-1]
     g_log_probs = g_log_probs[:-1]
-    penalty = penalty[:-1]
+    penalty = communication_cost_multiple_samples(data.edge_index, 
+        data.edge_attr, data.batch, distance_matrix, mappings, num_samples)
+    # take the value of the last sample for threshold
     log_q = gumbel_log_survival(threshold - g_log_probs).detach()
-    log_importance = log_probs - log_q
-    b_s = torch.sum(torch.exp(log_importance) * penalty).detach()
-    w_s = torch.sum(torch.exp(log_importance)).detach()
-    wi_s = (w_s - torch.exp(log_importance) +  torch.exp(log_probs)).detach()
+    log_importance = (log_probs - log_q).detach()
+    wi_s = (log_importance.unsqueeze(1).repeat(1,log_importance.size(0)) - log_importance.unsqueeze(0)).exp().sum(dim=0) - 1 + torch.exp(log_q)
+    importance_normalized = F.softmax(log_importance, dim=0)
+    b_s = torch.sum( importance_normalized * penalty)
     min_penalty = torch.argmin(penalty)
     if penalty[min_penalty] < best_cost:
         best_cost = penalty[min_penalty]
         best_mapping = mappings[min_penalty]
-    loss = torch.sum((1/wi_s) * torch.exp(log_importance) * (penalty - b_s / w_s))
+    loss = torch.sum((1/wi_s) * log_probs * (penalty - b_s))
     optim.zero_grad()
     loss.backward()
     nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
@@ -101,7 +101,7 @@ for epoch in range(num_epochs):
         count_not_decrease += 1
     else:
         count_not_decrease = 0
-    if count_not_decrease > 2000:
+    if count_not_decrease > 5000:
         print('Early stopping at epoch {}'.format(epoch))
         break
     loss_list.append(penalty[min_penalty].item())

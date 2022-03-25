@@ -71,6 +71,22 @@
                 "1024"
             ],
             "console": "integratedTerminal",
+        },
+        {
+            "name": "active_search_2",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/active_search_2.py",
+            "args": [
+                "data_tgff/single/traffic_32.pt", 
+                "--lr",
+                "0.001",
+                "--max_iter",
+                "5000", 
+                "--num_samples",
+                "1024"
+            ],
+            "console": "integratedTerminal",
         }
     ]
 }

@@ -18,6 +18,7 @@ parser.add_argument('--num_samples', help='number of unique solutions to be samp
 parser.add_argument('--pretrained_model_path', help='path to pretrained model', type=str, default=None)
 parser.add_argument('--lr', help='learning rate', type=float, default=0.001)
 parser.add_argument('--three_D', help='use a fully connected 3D NoC with 2 layers in the Z direction', action='store_true')
+parser.add_argument('--decoding_type', help='type of decoding', type=str, default='sampling')
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -29,7 +30,7 @@ def load_and_process_data(dataset_path, device = torch.device("cpu")):
     return data
 #%%
 def load_model(graph_size, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None):
-    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False, feature_scale=feature_scale, decoding_type='sampling')
+    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False, feature_scale=feature_scale)
     if pretrained_model_path is not None:
         mpnn_ptr.load_state_dict(torch.load(pretrained_model_path, map_location=device))
     mpnn_ptr.to(device)
@@ -48,7 +49,9 @@ else:
     n = math.floor(math.sqrt(graph_size))
     m = math.ceil(graph_size / n)
     distance_matrix = generate_distance_matrix(n,m).to(device)
-mpnn_ptr = load_model(graph_size, device, feature_scale=1, pretrained_model_path=args.pretrained_model_path)
+if args.pretrained_model_path is None:
+    feature_scale = data.edge_attr.max()
+mpnn_ptr = load_model(graph_size, device, feature_scale=feature_scale, pretrained_model_path=args.pretrained_model_path)
 mpnn_ptr.train()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=args.lr)
 # lr_scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=100, gamma=0.93)
@@ -62,19 +65,16 @@ count_not_decrease = 0
 start = timer()
 for epoch in range(num_epochs):
     mpnn_ptr.train()
-    mpnn_ptr.decoding_type = 'sampling'
-    predicted_mappings, log_probs = mpnn_ptr(data, num_samples)
+    mpnn_ptr.decoding_type = args.decoding_type
+    predicted_mappings, log_probs = mpnn_ptr(data, num_samples)[:2]
     penalty = communication_cost_multiple_samples(data.edge_index, 
         data.edge_attr, data.batch, distance_matrix, predicted_mappings, num_samples)
     min_penalty = torch.argmin(penalty)
     if penalty[min_penalty] < best_cost:
         best_cost = penalty[min_penalty]
         best_mapping = predicted_mappings[min_penalty]
-    # if epoch == 0:
     baseline = penalty.mean()
-    # else:
-    #     baseline = 0.9 * baseline + 0.1 * penalty.mean()
-    loss = torch.mean((penalty.detach() - baseline.detach())*log_probs)
+    loss = (1/(num_samples-1)) * torch.sum((penalty.detach() - baseline.detach())*log_probs)
     optim.zero_grad()
     loss.backward()
     nn.utils.clip_grad_norm_(mpnn_ptr.parameters(), max_norm=1, norm_type=2)
@@ -87,13 +87,13 @@ for epoch in range(num_epochs):
             best_cost = float(cost)
             best_mapping = mapping[0]
         print(f'Epoch: {epoch + 1:4}/{num_epochs} Min Comm Cost: {best_cost:8.2f}   Avg Comm Cost: {penalty.mean():8.2f}')
-
+        print(f'{best_mapping}')
     # break the training loop if min_penalty is not decreasing for consecutive 10000 epochs
     if penalty[min_penalty] > best_cost:
         count_not_decrease += 1
     else:
         count_not_decrease = 0
-    if count_not_decrease > 4000:
+    if count_not_decrease > 5000:
         print('Early stopping at epoch {}'.format(epoch))
         break
     loss_list.append(penalty[min_penalty].item())
