@@ -118,7 +118,9 @@ class PointerNet(nn.Module):
         # seq_len is the length of the longest sequence in the batch
         seq_len = torch.max(lengths).item()
         # reshape input and mask to remove extra padding
+        # first dimension of the input is seq_len
         input = input[:seq_len]
+        # second dimension of the mask is seq_len
         mask = mask[:, :seq_len]
         return input, mask
 
@@ -234,7 +236,7 @@ def main():
     n_layers = 2
     p = 0.1
     batch_size = 1
-    seq_len = 16
+    seq_len = 5
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = PointerNet(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True,decoding_type='sampling').to(device)
     input = torch.randn(seq_len, batch_size, input_dim).to(device)
