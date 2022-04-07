@@ -36,6 +36,12 @@
             "module": "models.seqToseq"
         },
         {
+            "name": "Python: Module transformers",
+            "type": "python",
+            "request": "launch",
+            "module": "models.transformers"
+        },
+        {
             "name": "Python: Attach",
             "type": "python",
             "request": "attach",
