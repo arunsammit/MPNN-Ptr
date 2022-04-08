@@ -23,7 +23,6 @@ class TransformerEncoder(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(d_model = input_dim, nhead = 8, dim_feedforward = hidden_dim, dropout = p)
         self.encoder = nn.TransformerEncoder(encoder_layer, n_layers)
     def forward(self, input, mask):
-        mask = mask == 0
         print(mask)
         node_embeddings = self.encoder(input, src_key_padding_mask = mask)
         graph_embeddings = torch.mean(node_embeddings, dim = 0)
@@ -71,9 +70,15 @@ class TransformerPointerNet(nn.Module):
         mask = mask[:, :seq_len]
         return input, mask
     def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, num_heads = 8, decoding_type = 'sampling',):
+        super(TransformerPointerNet, self).__init__()
         self.encoder: TransformerEncoder = TransformerEncoder(input_dim, hidden_dim, n_layers, p)
         self.v1 = nn.Parameter(torch.empty(1, input_dim, device=device))
         self.v2 = nn.Parameter(torch.empty(1, input_dim, device=device))
+        # try to add non-linearity (nn.ReLU) & bias to improve the performance to improve the performance 
+        self.proj1 = nn.Sequential( 
+            nn.Linear(3*input_dim, input_dim, bias = False),
+            # nn.ReLU()
+        )
         # if model is not able to learn check with  bias = False once
         self.mha = nn.MultiheadAttention(input_dim, num_heads, dropout=p)
         self.attn = TransformerAttention(input_dim, logit_clipping = logit_clipping)
@@ -84,7 +89,7 @@ class TransformerPointerNet(nn.Module):
         # shape of input: (seq_len, batch_size, input_dim)
         batch_size = input.size(1)
         seq_len = input.size(0)
-        predicted_mappings = torch.zeros(batch_size, num_samples, seq_len, device=input.device)
+        predicted_mappings = torch.zeros(batch_size, num_samples, seq_len, device=input.device, dtype = torch.long)
         node_embeddings, graph_embeddings = self.encoder(input, mask == 0)
         # shape of node_embeddings: (seq_len, batch_size, input_dim)
         # shape of graph_embeddings: (batch_size, input_dim)
@@ -99,14 +104,18 @@ class TransformerPointerNet(nn.Module):
             # shape of context_embedding: (batch_size, input_dim)
             if t > 0:
                 node_embeds_batch_first = node_embeddings.transpose(0, 1)
-                prev_indices = predicted_mappings.index_select(2, torch.tensor(t-1))
-                prev_decoded_embeddings = node_embeds_batch_first.gather(1, prev_indices).squeeze()
-                first_indices = predicted_mappings.index_select(2, torch.tensor(0))
-                first_decoded_embeddings = node_embeds_batch_first.gather(1, first_indices).squeeze()
+                prev_indices = predicted_mappings[:,:, t-1]
+                prev_decoded_embeddings = node_embeds_batch_first.gather(1, prev_indices.unsqueeze(-1).expand(-1,-1,16))\
+                    .view(batch_size * num_samples, -1)
+                first_indices = predicted_mappings[:,:,0]
+                first_decoded_embeddings = node_embeds_batch_first.gather(1, first_indices.unsqueeze(-1).expand(-1,-1,16))\
+                    .view(batch_size * num_samples, -1)
+                mask_decoding = mask_decoding.view(batch_size * num_samples, -1)
             context_embedding = torch.cat([graph_embeddings, prev_decoded_embeddings, first_decoded_embeddings], dim=1)
-            context_embedding_glimpsed = self.mha(context_embedding.unsqueeze(1), node_embeddings, node_embeddings, key_padding_mask=mask_decoding == 0)
-            # shape of context_embedding: (batch_size, 1, input_dim)
-            logits = self.attn(context_embedding_glimpsed, node_embeddings, mask_decoding == 0)
+            context_embedding_proj = self.proj1(context_embedding.unsqueeze(0))            
+            context_embedding_glimpsed, _ = self.mha(context_embedding_proj, node_embeddings, node_embeddings, key_padding_mask=mask_decoding == 0, need_weights=False)
+            # shape of context_embedding_proj: (batch_size, 1, input_dim)
+            logits = self.attn(context_embedding_glimpsed, node_embeddings, mask_decoding == 0).view(batch_size, -1, seq_len)
             # shape of logits: (batch_size, 1, seq_len)
             logits = logits.squeeze(1)
             log_probs = F.log_softmax(logits, dim=-1)
@@ -151,6 +160,7 @@ class TransformerPointerNet(nn.Module):
                 else:
                     # shape of log_probs: (batch_size, num_samples, seq_len)
                     selected_indices = torch.multinomial(log_probs.exp(), 1, replacement=True).long().squeeze(-1)
+                mask_decoding = mask_decoding.view(batch_size, num_samples, -1)
             predicted_mappings[:, :, t] = selected_indices
             gather_indices = selected_indices.unsqueeze(-1).clone()
             gather_indices[gather_indices == -1] = 0
@@ -184,13 +194,15 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # encoder = TransformerEncoder(input_dim, hidden_dim, n_layers, p).to(device)
     tPtrNet = TransformerPointerNet(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True).to(device)
+    from utils.utils import init_weights
+    tPtrNet.apply(init_weights)
     input = torch.randn(seq_len, batch_size, input_dim).to(device)
     mask = torch.ones(batch_size, seq_len).to(device)
     # mask[:, -1:] = 0
     # print(input)
     # input.permute(1,0,2)[mask == 0] = -5
     print(input)
-    mappings,  ll_sum = tPtrNet(input, mask)
+    mappings,  ll_sum = tPtrNet(input, mask, 3)
     print(mappings)
     print(ll_sum)
 if __name__ == '__main__':

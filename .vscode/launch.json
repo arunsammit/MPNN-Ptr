@@ -39,7 +39,8 @@
             "name": "Python: Module transformers",
             "type": "python",
             "request": "launch",
-            "module": "models.transformers"
+            "module": "models.transformers",
+            "justMyCode": false
         },
         {
             "name": "Python: Attach",
