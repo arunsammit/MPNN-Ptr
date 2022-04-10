@@ -68,15 +68,15 @@ datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
 save_folder.mkdir(parents=True, exist_ok=True)
 # %%
 torch.autograd.set_detect_anomaly(True)
-avg_valid_comm_cost = validate_dataloader(
-    mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
-loss_list_dev.append(avg_valid_comm_cost)
-print_str = f'Epoch: 0/{num_epochs} Dev Comm cost: {avg_valid_comm_cost}'
-print(print_str)
+# avg_valid_comm_cost = validate_dataloader(
+#     mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
+# loss_list_dev.append(avg_valid_comm_cost)
+# print_str = f'Epoch: 0/{num_epochs} Dev Comm cost: {avg_valid_comm_cost}'
+# print(print_str)
 logs_save_folder = save_folder / "logs"
 logs_save_folder.mkdir(parents=True, exist_ok = True)
 f = open(logs_save_folder / f'{datetime_suffix}_train_loss.txt', 'a')
-f.write(f"{print_str}\n")
+# f.write(f"{print_str}\n")
 model_save_folder = save_folder / "models_data"
 model_save_folder.mkdir(parents=True, exist_ok=True)
 per_epoch_save_folder = model_save_folder / f'per_epoch'

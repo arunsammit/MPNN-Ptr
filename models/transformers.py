@@ -160,15 +160,15 @@ class TransformerPointerNet(nn.Module):
             hidden_dim = node_embeddings.size(-1)
             predicted_mappings[:, :, t] = selected_indices
             node_embeds_batch_first = node_embeddings.transpose(0, 1)
-            prev_indices = predicted_mappings[:,:, t-1]
-            prev_decoded_embeddings = node_embeds_batch_first.gather(1, prev_indices.unsqueeze(-1).expand(-1,-1, hidden_dim))\
-                .view(batch_size * num_samples, -1)
-            first_indices = predicted_mappings[:,:,0]
-            first_decoded_embeddings = node_embeds_batch_first.gather(1, first_indices.unsqueeze(-1).expand(-1,-1,hidden_dim))\
+            first_indices = predicted_mappings[:,:,0].unsqueeze(-1).clone()
+            first_indices = first_indices.masked_fill(first_indices == -1, 0)
+            first_decoded_embeddings = node_embeds_batch_first.gather(1, first_indices.expand(-1,-1,hidden_dim))\
                 .view(batch_size * num_samples, -1)
             # creating the indices for gathering log_probs corresponding to choosen indices
             gather_indices = selected_indices.unsqueeze(-1).clone()
-            gather_indices[gather_indices == -1] = 0
+            gather_indices = gather_indices.masked_fill(gather_indices == -1, 0)
+            prev_decoded_embeddings = node_embeds_batch_first.gather(1, gather_indices.expand(-1,-1, hidden_dim))\
+                .view(batch_size * num_samples, -1)
             curr_log_probs = log_probs.gather(-1, gather_indices).squeeze(-1) * mask_multiple_samples[:,:, t]
             log_probs_sum += curr_log_probs
             if self.decoding_type == 'sampling-w/o-replacement':
