@@ -1,7 +1,7 @@
 # %%
 from torch_geometric.loader.dataloader import DataLoader
 from torch_geometric.data import Data
-from models.mpnn_ptr import MpnnPtr
+from models.mpnn_ptr import MpnnPtr, MpnnTransformer
 from utils.utils import init_weights
 from utils.datagenerate import DistanceMatrix, DistanceMatrixNew
 import torch
@@ -20,20 +20,22 @@ max_graph_size = 121
 batch_size_train = 32
 batch_size_dev = 128
 # change the number to 0 to use a random initialize model parameters
-saved_model_path = 'models_data_multiple/full/models_data/model_init_pop_03-08_19-57.pt'
+# saved_model_path = 'models_data_multiple/full/models_data/model_init_pop_03-08_19-57.pt'
+saved_model_path = None
 lr = 0.00001
 # lr_decay_gamma = .96
 num_epochs = 10 #27
 num_samples = 8
 beam_width = 8
-training_algorithm = 'init_pop'  # 'init_pop' or 'pretrain'
+training_algorithm = 'pretrain'  # 'init_pop' or 'pretrain'
+model = "transformer"
 root_folder = Path('./models_data_multiple') # to save the trained model, the logs and the validation results
 save_folder = root_folder / "full"  # 'models_data_final'
 distance_matrix_dict = DistanceMatrix()
 # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
 # %%
-root_train = 'data_tgff/multiple/train_final'
-root_dev = 'data_tgff/multiple/test'
+root_train = 'data_tgff/multiple_small/train'
+root_dev = 'data_tgff/multiple_small/test'
 train_good_files = (None, ['traindata_multiple_TGFF_norm_64.pt'])[0]
 dev_good_files = (None,['testdata_multiple_TGFF_norm_64.pt'])[0]
 train_dataloader = getDataLoader(
@@ -41,8 +43,11 @@ train_dataloader = getDataLoader(
 dev_dataloader = getDataLoader(
     root_dev, batch_size_dev, max_graph_size=max_graph_size, raw_file_names=dev_good_files)
 # %% initialize the models
-mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
+if model == "lstm":
+    mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
                    hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
+elif model == "transformer":
+    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
 mpnn_ptr.to(device)
 # %% load model if saved
 if saved_model_path:
@@ -62,6 +67,7 @@ loss_list_dev = []
 datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
 save_folder.mkdir(parents=True, exist_ok=True)
 # %%
+torch.autograd.set_detect_anomaly(True)
 avg_valid_comm_cost = validate_dataloader(
     mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
 loss_list_dev.append(avg_valid_comm_cost)

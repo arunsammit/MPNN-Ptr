@@ -3,6 +3,7 @@ from torch import nn
 from models.seqToseq import PointerNet
 import torch
 import torch_geometric
+from models.transformers import TransformerPointerNet
 
 # combine Mpnn and PointeNet
 class MpnnPtr(nn.Module):
@@ -28,6 +29,29 @@ class MpnnPtr(nn.Module):
         # batched_embeddings shape: (batch_size, max_num_nodes, embedding_dim)
         # pass embeddings and mask through PointerNet to get pointer
         return self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
+class MpnnTransformer(nn.Module):
+    def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True, decoding_type='sampling', feature_scale=1.0):
+        # K is the number of rounds of message passing
+        super(MpnnTransformer, self).__init__()
+        self.mpnn = Mpnn(input_dim, embedding_dim, K)
+        self.device = device
+        self.logit_clipping = logit_clipping
+        self.feature_scale = feature_scale
+        self.t_ptr_net = TransformerPointerNet(embedding_dim, hidden_dim, n_layers, p_dropout, device, logit_clipping, decoding_type=decoding_type)
+    @property
+    def decoding_type(self):
+        return self.t_ptr_net.decoding_type
+    @decoding_type.setter
+    def decoding_type(self, decoding_type):
+        self.t_ptr_net.decoding_type = decoding_type
+    def forward(self, data, num_samples=1):
+        # data is batch of graphs
+        # pass data through Mpnn to get embeddings
+        embeddings = self.mpnn(data.x / self.feature_scale, data.edge_index, data.edge_attr / self.feature_scale, data.batch)
+        batched_embeddings, mask = torch_geometric.utils.to_dense_batch(embeddings, data.batch)
+        # batched_embeddings shape: (batch_size, max_num_nodes, embedding_dim)
+        # pass embeddings and mask through PointerNet to get pointer
+        return self.t_ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
 def main():
     from utils.datagenerate import generate_graph_data_list
     from utils.datagenerate import generate_graph_data_loader_with_distance_matrix
