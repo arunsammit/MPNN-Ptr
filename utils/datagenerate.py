@@ -37,6 +37,20 @@ def generate_graph_data_loader_with_distance_matrix(sizes_list, batch_size, devi
     dataloader = DataLoader(datalist, batch_size=batch_size, shuffle=shuffle)
     return dataloader, distance_matrices
 
+def get_mesh_dimensions_newer(num_nodes):
+    """
+    returns first_dim, second_dim for a 2D mesh suitable for given number of nodes according to newer method of numbering routers
+    """
+    n = math.floor(math.sqrt(num_nodes))
+    m = n
+    if n * m != num_nodes:
+        if n & 1:
+            n += 1
+        else:
+            m += 1
+    if n * m != num_nodes:
+        raise ValueError(f"max_num_nodes must be either a perfect square or product of two consecutive integers")
+    return n, m
 
 def _generate_distance_matrix(dims, mapping):
     G = nx.grid_graph(dims)
@@ -47,6 +61,35 @@ def _generate_distance_matrix(dims, mapping):
         for j, val in d.items():
             D[i, j] = val
     return torch.from_numpy(D)
+def num_from_coord(x ,y):
+
+    if x >= y:
+        if x & 1: # x is odd
+            return x**2 + y
+        else: # x is even
+            return x**2 +2*x - y
+    else:
+        if not(y & 1): # y is even
+            return y**2 + x
+        else: # y is odd
+            return y**2 + 2*y - x
+            
+class NocNumbering():
+    def __init__(self, mesh):
+        self.mesh = mesh
+        self.num_to_coord = {num: (i, j) for i, row in enumerate(mesh) for j, num in enumerate(row)}
+    def get_num(self, x, y):
+        return self.mesh[x, y]
+    def get_coord(self, num):
+        return self.num_to_coord[num]
+class NocNumberingNew(NocNumbering):
+    def __init__(self, max_num_nodes = 121):
+        d1, d2 = get_mesh_dimensions_newer(max_num_nodes)
+        mesh = np.full((d1, d2), -1, dtype=int)
+        for i in range(mesh.shape[0]):
+            for j in range(mesh.shape[1]):
+                mesh[i, j] = num_from_coord(i, j)
+        super().__init__(mesh)
 def generate_distance_matrix(n,m, numbering='default'):
     """
     If numbering is 'default' then for n = 4 and m = 4, numbering is like:
@@ -56,10 +99,10 @@ def generate_distance_matrix(n,m, numbering='default'):
     15 16 17 18 19 
 
     else if numbering is 'new' then for n = 4 and m = 4, numbering is like:
-    0  1  4  9  16 .  .  .
-    3  2  5  10 17 .  .  .
-    8  7  6  11 18 .  .  .
-    15 14 13 12 19 .  .  .
+    0  3  4  15 16  .  .  .
+    1  2  5  14 17 .  .  .
+    8  7  6  13 18 .  .  .
+    9  10 11 12 19 .  .  .
     .  .  .  .  .  .  .  .
     .  .  .  .  .  .  .  .
     .  .  .  .  .  .  .  .
@@ -67,7 +110,7 @@ def generate_distance_matrix(n,m, numbering='default'):
     if numbering == 'default':
         mapping_func = lambda k, l: m * k + l
     elif numbering == 'new':
-        mapping_func = lambda k, l: k*(k+2) - l if k > l else l**2 + k
+        mapping_func = num_from_coord
     else:
         raise ValueError('numbering must be either default or new')
     mapping = {(k, l): mapping_func(k, l) for k in range(n) for l in range(m)}    
@@ -93,10 +136,7 @@ class DistanceMatrixNew:
         m = math.ceil(num_nodes / n)
         return n * m == num_nodes and abs(n - m) <= 1
     def __init__(self, max_num_nodes):
-        if not self.is_valid(max_num_nodes):
-            raise ValueError(f"max_num_nodes must be either a perfect square or product of two consecutive integers")
-        n = math.ceil(math.sqrt(max_num_nodes))
-        m = math.ceil(max_num_nodes / n)
+        n, m = get_mesh_dimensions_newer(max_num_nodes)
         self.distance_matrix = generate_distance_matrix(n, m, numbering='new')
         self.max_num_nodes = max_num_nodes
 
