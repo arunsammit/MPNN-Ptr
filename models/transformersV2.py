@@ -1,4 +1,5 @@
 from re import L
+from numpy.lib.twodim_base import diag
 import torch
 from typing import Tuple
 from torch import Tensor, nn
@@ -36,7 +37,7 @@ class TransformerPointerNet2(nn.Module):
         # second dimension of the mask is seq_len
         mask = mask[:, :seq_len]
         return input, mask
-    def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, num_heads = 8, decoding_type = 'sampling',node_to_coord_map = None, coord_to_node_map = None):
+    def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, num_heads = 8, decoding_type = 'sampling', numbering = NocNumberingNew()):
         super(TransformerPointerNet2, self).__init__()
         self.encoder: TransformerEncoder = TransformerEncoder(input_dim, hidden_dim=hidden_dim, n_layers=n_layers, p=p)
         self.v1 = nn.Parameter(torch.empty(1, hidden_dim, device=device))
@@ -50,8 +51,7 @@ class TransformerPointerNet2(nn.Module):
         self.mha = nn.MultiheadAttention(hidden_dim, num_heads, dropout=p)
         self.attn = TransformerAttention(hidden_dim, logit_clipping = logit_clipping)
         self.decoding_type = decoding_type
-        self.node_to_coord = node_to_coord_map
-        self.coord_to_node = coord_to_node_map
+        self.numbering = numbering
     def forward(self, input, mask, num_samples = 1):
         input, mask = self.preprocess(input, mask)
         # shape of mask: (batch_size, seq_len)
@@ -72,6 +72,12 @@ class TransformerPointerNet2(nn.Module):
             # prepare the context embedding
             # shape of context_embedding: (batch_size, hidden_dim)
             # mask_decoding = mask_decoding.view(batch_size * num_samples, -1)
+            if t > 1:
+                adj_idx = self.numbering.get_adj_idx(t   )
+                adjacent_indices = predicted_mappings[:,:,adj_idx].unsqueeze(-1).clone()
+                adjacent_indices = adjacent_indices.masked_fill(adjacent_indices == -1, 0)
+                adjacent_decoded_embeddings = node_embeds_batch_first.gather(1, adjacent_indices.expand(-1,-1,hidden_dim))\
+                .view(batch_size * num_samples, -1)
             context_embedding = torch.cat([graph_embeddings, prev_decoded_embeddings, adjacent_decoded_embeddings], dim=1)
             context_embedding_proj = self.proj1(context_embedding.unsqueeze(0))            
             context_embedding_glimpsed, _ = self.mha(context_embedding_proj, node_embeddings, node_embeddings, key_padding_mask=mask_decoding == 0, need_weights=False)
@@ -103,6 +109,7 @@ class TransformerPointerNet2(nn.Module):
                 graph_embeddings = graph_embeddings.repeat_interleave(num_samples, dim=0)
                 node_embeddings = node_embeddings.repeat_interleave(num_samples, dim=1)
                 # filling mask with -1 is not required
+                adjacent_decoded_embeddings = adjacent_decoded_embeddings.repeat_interleave(num_samples, dim=0)
             else:
                 if self.decoding_type != 'sampling':
                     if self.decoding_type == 'sampling-w/o-replacement':
@@ -133,11 +140,6 @@ class TransformerPointerNet2(nn.Module):
             prev_decoded_embeddings = node_embeds_batch_first.gather(1, gather_indices.expand(-1,-1, hidden_dim))\
                 .view(batch_size * num_samples, -1)
             # below implementation is written assuming that all graphs in the given batch are of same size
-
-            adjacent_indices = predicted_mappings[:,:,0].unsqueeze(-1).clone()
-            adjacent_indices = adjacent_indices.masked_fill(adjacent_indices == -1, 0)
-            adjacent_decoded_embeddings = node_embeds_batch_first.gather(1, adjacent_indices.expand(-1,-1,hidden_dim))\
-                .view(batch_size * num_samples, -1)
             curr_log_probs = log_probs.gather(-1, gather_indices).squeeze(-1) * mask_multiple_samples[:,:, t]
             log_probs_sum += curr_log_probs
             if self.decoding_type == 'sampling-w/o-replacement':

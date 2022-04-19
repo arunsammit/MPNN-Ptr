@@ -75,13 +75,62 @@ def num_from_coord(x ,y):
             return y**2 + 2*y - x
             
 class NocNumbering():
+    @staticmethod
     def __init__(self, mesh):
         self.mesh = mesh
         self.num_to_coord = {num: (i, j) for i, row in enumerate(mesh) for j, num in enumerate(row)}
+        self.adj_idxs = {num: self.compute_adj_idx(num) for num in set(self.num_to_coord) - {0, 1}}
     def get_num(self, x, y):
         return self.mesh[x, y]
     def get_coord(self, num):
         return self.num_to_coord[num]
+    def get_adj_idx(self, num):
+        if num == 0 or num == 1 or num >= self.mesh.shape[0] * self.mesh.shape[1]:
+            raise ValueError(f"{num} is not a valid node number")
+        return self.adj_idxs[num]
+    def get_neigh(self, num, max_num=None, diag=False):
+        x, y = self.get_coord(num)
+        if max_num is not None:
+            max_x, max_y = self.get_coord(max_num)
+        else:
+            max_x, max_y = self.mesh.shape
+        neigh = set()
+        if x > 0:
+            neigh.add(self.get_num(x-1, y))
+        if x < max_x - 1:
+            neigh.add(self.get_num(x+1, y))
+        if y > 0:
+            neigh.add(self.get_num(x, y-1))
+        if y < max_y - 1:
+            neigh.add(self.get_num(x, y+1))
+        if diag:
+            if x > 0 and y > 0:
+                neigh.add(self.get_num(x-1, y-1))
+            if x > 0 and y < max_y - 1:
+                neigh.add(self.get_num(x-1, y+1))
+            if x < max_x - 1 and y > 0:
+                neigh.add(self.get_num(x+1, y-1))
+            if x < max_x - 1 and y < max_y - 1:
+                neigh.add(self.get_num(x+1, y+1))
+        return neigh
+    def compute_adj_idx(self, num):
+        def cleanup(adj_idxs):
+            adj_idxs.discard(num-1)
+            for val in list(adj_idxs):
+                if val > num:
+                    adj_idxs.discard(val)    
+        adj_idxs = self.get_neigh(num)    
+        cleanup(adj_idxs)
+        if len(adj_idxs) == 0:
+            adj_idxs = self.get_neigh(num, diag=True)
+            cleanup(adj_idxs)
+        if len(adj_idxs) != 1:
+            print(f"{num} has {len(adj_idxs)} neighbors")
+            print(self.mesh)
+            raise ValueError('adj_idxs should have length 1, probably there is a bug somewhere')
+        return adj_idxs.pop()
+
+    
 class NocNumberingNew(NocNumbering):
     def __init__(self, max_num_nodes = 121):
         d1, d2 = get_mesh_dimensions_newer(max_num_nodes)
@@ -89,7 +138,7 @@ class NocNumberingNew(NocNumbering):
         for i in range(mesh.shape[0]):
             for j in range(mesh.shape[1]):
                 mesh[i, j] = num_from_coord(i, j)
-        super().__init__(mesh)
+        super().__init__(self, mesh)
 def generate_distance_matrix(n,m, numbering='default'):
     """
     If numbering is 'default' then for n = 4 and m = 4, numbering is like:
