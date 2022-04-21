@@ -105,6 +105,7 @@ class Decoder(nn.Module):
 
 class PointerNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, decoding_type = 'sampling'):
+        print("using lstm")
         super().__init__()
         self.encoder: Encoder = Encoder(input_dim, hidden_dim, n_layers, p)
         self.decoder: Decoder = Decoder(input_dim, hidden_dim, n_layers, p)

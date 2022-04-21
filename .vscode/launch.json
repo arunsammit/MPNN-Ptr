@@ -43,6 +43,13 @@
             "justMyCode": false
         },
         {
+            "name": "Python: Module transformersV2",
+            "type": "python",
+            "request": "launch",
+            "module": "models.transformersV2",
+            "justMyCode": false
+        },
+        {
             "name": "Python: Attach",
             "type": "python",
             "request": "attach",
@@ -69,13 +76,17 @@
             "request": "launch",
             "program": "${workspaceFolder}/active_search.py",
             "args": [
-                "data_tgff/single/traffic_32.pt", 
+                "data_tgff/single/traffic_72.pt", 
                 "--lr",
                 "0.001",
                 "--max_iter",
                 "5000", 
                 "--num_samples",
-                "1024"
+                "1024",
+                "--model",
+                "transformer",
+                "--transformer_version",
+                "v2"
             ],
             "console": "integratedTerminal",
         },

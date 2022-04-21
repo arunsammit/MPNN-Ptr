@@ -18,8 +18,11 @@ def beam_search_data(model, data, distance_matrix, beam_width):
     """
     don't forget to set model.decoding_type = 'greedy' and model.eval() before calling this function
     """
+    # print(distance_matrix.shape)
+    # print(data)
     with torch.no_grad():
         mappings, _ = model(data, beam_width)
+        # print(mappings)
         comm_cost = communication_cost_multiple_samples(data.edge_index, data.edge_attr, data.batch, distance_matrix, mappings, beam_width)
         comm_cost, min_indices = comm_cost.view(beam_width, -1).min(dim=0)
         choosen_mappings = mappings.view(beam_width, data.num_graphs, -1)[min_indices, torch.arange(data.num_graphs)]

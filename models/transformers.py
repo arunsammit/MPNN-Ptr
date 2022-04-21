@@ -73,6 +73,7 @@ class TransformerPointerNet(nn.Module):
         return input, mask
     def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, num_heads = 8, decoding_type = 'sampling',):
         super(TransformerPointerNet, self).__init__()
+        print("using transformers_v1")
         self.encoder: TransformerEncoder = TransformerEncoder(input_dim, hidden_dim=hidden_dim, n_layers=n_layers, p=p)
         self.v1 = nn.Parameter(torch.empty(1, hidden_dim, device=device))
         self.v2 = nn.Parameter(torch.empty(1, hidden_dim, device=device))
@@ -177,7 +178,7 @@ class TransformerPointerNet(nn.Module):
             mask_decoding.scatter_(-1, gather_indices.view(batch_size * num_samples, -1), 0)
 
         predicted_mappings = predicted_mappings.masked_fill(mask_multiple_samples == 0, -1)
-        # changing the shapes so that the samples are all nth samples are present together
+        # changing the shapes so that all the nth samples are present together
         predicted_mappings = predicted_mappings.transpose(0, 1).reshape(-1, seq_len)
         log_probs_sum = log_probs_sum.transpose(0, 1).reshape(-1)
         if self.decoding_type == 'sampling-w/o-replacement':

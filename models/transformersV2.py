@@ -6,7 +6,7 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 import math
 from gumbel import gumbel_like, gumbel_with_maximum
-from transformers import rearrange, TransformerAttention
+from models.transformers import rearrange, TransformerAttention
 from utils.datagenerate import NocNumberingNew
 
 class TransformerEncoder(nn.Module):
@@ -38,6 +38,7 @@ class TransformerPointerNet2(nn.Module):
         mask = mask[:, :seq_len]
         return input, mask
     def __init__(self, input_dim, hidden_dim, n_layers, p, device, logit_clipping=True, num_heads = 8, decoding_type = 'sampling', numbering = NocNumberingNew()):
+        print("using transformers_v2")
         super(TransformerPointerNet2, self).__init__()
         self.encoder: TransformerEncoder = TransformerEncoder(input_dim, hidden_dim=hidden_dim, n_layers=n_layers, p=p)
         self.v1 = nn.Parameter(torch.empty(1, hidden_dim, device=device))
@@ -120,8 +121,9 @@ class TransformerPointerNet2(nn.Module):
                     scores_per_batch = scores.view(batch_size, -1)
                     _, indices_buf = torch.topk(scores_per_batch, num_samples, dim=-1)
                     beams_buf = torch.div(indices_buf, seq_len, rounding_mode="floor")
-                    indices_buf = indices_buf.fmod(seq_len)
                     # shape of indices_buf: (batch_size, num_samples)
+                    indices_buf = indices_buf.fmod(seq_len)
+                    selected_indices = indices_buf
                     predicted_mappings = rearrange(predicted_mappings, beams_buf)
                     log_probs = rearrange(log_probs, beams_buf)
                     
@@ -148,7 +150,7 @@ class TransformerPointerNet2(nn.Module):
             mask_decoding.scatter_(-1, gather_indices.view(batch_size * num_samples, -1), 0)
 
         predicted_mappings = predicted_mappings.masked_fill(mask_multiple_samples == 0, -1)
-        # changing the shapes so that the samples are all nth samples are present together
+        # changing the shapes so that the are all nth samples are present together
         predicted_mappings = predicted_mappings.transpose(0, 1).reshape(-1, seq_len)
         log_probs_sum = log_probs_sum.transpose(0, 1).reshape(-1)
         if self.decoding_type == 'sampling-w/o-replacement':
@@ -167,7 +169,8 @@ def main():
     hidden_dim = 32
     p = 0
     batch_size = 2
-    seq_len = 5
+    seq_len = 10
+    num_samples = 10
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # encoder = TransformerEncoder(input_dim, hidden_dim, n_layers, p).to(device)
     tPtrNet = TransformerPointerNet2(input_dim, hidden_dim, n_layers, p, device, logit_clipping=True).to(device)
@@ -179,8 +182,9 @@ def main():
     # print(input)
     # input.permute(1,0,2)[mask == 0] = -5
     print(input)
-    mappings,  ll_sum = tPtrNet(input, mask, 3)
-    print(mappings)
-    print(ll_sum)
+    tPtrNet.decoding_type = 'sampling'
+    mappings,  ll_sum = tPtrNet(input, mask, num_samples)
+    print(mappings.view(num_samples,batch_size, seq_len).transpose(0,1))
+    print(ll_sum.view(num_samples,batch_size).transpose(0,1))
 if __name__ == '__main__':
     main()

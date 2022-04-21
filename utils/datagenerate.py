@@ -159,6 +159,7 @@ def generate_distance_matrix(n,m, numbering='default'):
     if numbering == 'default':
         mapping_func = lambda k, l: m * k + l
     elif numbering == 'new':
+        print("Using newer numbering")
         mapping_func = num_from_coord
     else:
         raise ValueError('numbering must be either default or new')

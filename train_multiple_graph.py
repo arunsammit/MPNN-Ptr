@@ -13,6 +13,7 @@ from train.trainers import TrainerInitPop, TrainerSR
 from train.validation import validate_dataloader
 from tqdm.auto import tqdm
 from pathlib import Path
+import numpy as np
 
 # %% initializing the parameters
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -28,10 +29,15 @@ num_epochs = 10 #27
 num_samples = 8
 beam_width = 8
 training_algorithm = 'pretrain'  # 'init_pop' or 'pretrain'
-model = "transformer"
+model = "lstm"
+transformer_version = "v1"
 root_folder = Path('./models_data_multiple') # to save the trained model, the logs and the validation results
 save_folder = root_folder / "small"  # ('models_data_final', 'full', 'small')
 distance_matrix_dict = DistanceMatrixNew(121) # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
+# %%
+# setting the random states for reproducibility
+torch.manual_seed(0)
+np.random.seed(0)
 # %% change these to change the size of dataset
 root_train = 'data_tgff/multiple_small/train'
 root_dev = 'data_tgff/multiple_small/test'
@@ -46,7 +52,7 @@ if model == "lstm":
     mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
                    hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
 elif model == "transformer":
-    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=True)
+    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=True, version=transformer_version)
 mpnn_ptr.to(device)
 # %% load model if saved
 if saved_model_path:
@@ -67,11 +73,11 @@ datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
 save_folder.mkdir(parents=True, exist_ok=True)
 # %%
 torch.autograd.set_detect_anomaly(True)
-# avg_valid_comm_cost = validate_dataloader(
-#     mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
-# loss_list_dev.append(avg_valid_comm_cost)
-# print_str = f'Epoch: 0/{num_epochs} Dev Comm cost: {avg_valid_comm_cost}'
-# print(print_str)
+avg_valid_comm_cost = validate_dataloader(
+    mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
+loss_list_dev.append(avg_valid_comm_cost)
+print_str = f'Epoch: 0/{num_epochs} Dev Comm cost: {avg_valid_comm_cost}'
+print(print_str)
 logs_save_folder = save_folder / "logs"
 logs_save_folder.mkdir(parents=True, exist_ok = True)
 f = open(logs_save_folder / f'{datetime_suffix}_train_loss.txt', 'a')
