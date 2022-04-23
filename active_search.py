@@ -55,6 +55,8 @@ else:
         n, m = get_mesh_dimensions_newer(graph_size)
         distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
     else:
+        # n, m = get_mesh_dimensions_newer(graph_size)
+        # distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
         n = math.floor(math.sqrt(graph_size))
         m = math.ceil(graph_size / n)
         distance_matrix = generate_distance_matrix(n,m).to(device)
@@ -96,7 +98,7 @@ for epoch in range(num_epochs):
             best_cost = float(cost)
             best_mapping = mapping[0]
         print(f'Epoch: {epoch + 1:4}/{num_epochs} Min Comm Cost: {best_cost:8.2f}   Avg Comm Cost: {penalty.mean():8.2f}')
-        # print(f'{best_mapping}')
+        print(f'{best_mapping}')
     # break the training loop if min_penalty is not decreasing for consecutive 10000 epochs
     if penalty[min_penalty] > best_cost:
         count_not_decrease += 1
@@ -130,6 +132,6 @@ fig.savefig(f'./plots/loss_single_uniform_{graph_size}_3.png')  # Save the figur
 # command to run with pretrained model:
 # python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.002 --pretrained_model_path models_data_final/model_16_01-10.pt --max_iter 5000 --num_samples 2048 --three_D
 # command to run without pretrained model:
-# python3 active_search.py data_tgff/single/traffic_72.pt --lr 0.0001 --max_iter 10000 --num_samples 1024
+# python3 active_search.py data_tgff/single/traffic_72.pt --lr 0.001 --max_iter 10000 --num_samples 1024 --model transformer
 # command to run with pretrained model and 3D:
 # python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.001 --max_iter 5000 --num_samples 1024 --three_D

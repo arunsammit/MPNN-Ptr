@@ -34,7 +34,7 @@ class MpnnTransformer(nn.Module):
     def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True, decoding_type='sampling', feature_scale=1.0, version='v1'):
         # K is the number of rounds of message passing
         super(MpnnTransformer, self).__init__()
-        self.mpnn = Mpnn(input_dim, embedding_dim, K)
+        # self.mpnn = Mpnn(input_dim, embedding_dim, K)
         self.device = device
         self.logit_clipping = logit_clipping
         self.feature_scale = feature_scale

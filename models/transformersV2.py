@@ -17,7 +17,10 @@ class TransformerEncoder(nn.Module):
         # also if you exactly want to replicate the wouter kool's approach you can replace the self.norm1 and self.norm2 with nn.BatchNorm1d
         encoder_layer = nn.TransformerEncoderLayer(d_model = hidden_dim, nhead = 8, dim_feedforward = dim_feedforward, dropout = p)
         self.encoder = nn.TransformerEncoder(encoder_layer, n_layers)
-        self.proj = nn.Linear(input_dim, hidden_dim)
+        self.proj = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            # nn.ReLU()
+        )
     def forward(self, input, mask):
         # print(mask)
         input_proj = self.proj(input)

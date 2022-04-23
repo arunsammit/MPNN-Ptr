@@ -21,19 +21,20 @@ max_graph_size = 121
 batch_size_train = 32
 batch_size_dev = 128
 # change the number to 0 to use a random initialize model parameters
-# saved_model_path = 'models_data_multiple/full/models_data/model_init_pop_03-08_19-57.pt'
-saved_model_path = None
+saved_model_path = 'models_data_multiple/small/models_data/model_pretrain_04-22_23-10.pt'
+# saved_model_path = None
 lr = 0.0001
 # lr_decay_gamma = .96
-num_epochs = 10 #27
+num_epochs = 20 #27
 num_samples = 8
 beam_width = 8
 training_algorithm = 'pretrain'  # 'init_pop' or 'pretrain'
-model = "lstm"
-transformer_version = "v1"
+model = "lstm" # 'lstm' or 'transformer'
+transformer_version = "v2"
 root_folder = Path('./models_data_multiple') # to save the trained model, the logs and the validation results
 save_folder = root_folder / "small"  # ('models_data_final', 'full', 'small')
-distance_matrix_dict = DistanceMatrixNew(121) # DistanceMatrixNew(max_graph_size) or DistanceMatrix()
+# distance_matrix_dict = DistanceMatrix()
+distance_matrix_dict = DistanceMatrixNew(121) 
 # %%
 # setting the random states for reproducibility
 torch.manual_seed(0)
@@ -52,7 +53,7 @@ if model == "lstm":
     mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
                    hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
 elif model == "transformer":
-    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=True, version=transformer_version)
+    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=3, p_dropout=0, device=device, logit_clipping=True, version=transformer_version)
 mpnn_ptr.to(device)
 # %% load model if saved
 if saved_model_path:

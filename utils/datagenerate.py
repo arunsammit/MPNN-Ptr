@@ -171,6 +171,7 @@ def generate_distance_matrix_3D(n, m, l):
 
 class DistanceMatrix(dict):
     def __init__(self, *args, **kwargs):
+        print("Using older sequence of decoding")
         super().__init__(*args, **kwargs)
     def __missing__(self, graph_size):
         # print(f"Generating distance matrix for graph size {graph_size}")
@@ -186,6 +187,7 @@ class DistanceMatrixNew:
         m = math.ceil(num_nodes / n)
         return n * m == num_nodes and abs(n - m) <= 1
     def __init__(self, max_num_nodes):
+        print("using newer sequence of decoding")
         n, m = get_mesh_dimensions_newer(max_num_nodes)
         self.distance_matrix = generate_distance_matrix(n, m, numbering='new')
         self.max_num_nodes = max_num_nodes
