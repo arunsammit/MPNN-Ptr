@@ -21,7 +21,7 @@ max_graph_size = 121
 batch_size_train = 32
 batch_size_dev = 128
 # change the number to 0 to use a random initialize model parameters
-saved_model_path = 'models_data_multiple/small/models_data/model_pretrain_04-22_23-10.pt'
+saved_model_path = 'models_data_multiple/small/models_data/model_pretrain_04-23_15-31.pt'
 # saved_model_path = None
 lr = 0.0001
 # lr_decay_gamma = .96
@@ -73,7 +73,7 @@ loss_list_dev = []
 datetime_suffix = datetime.now().strftime('%m-%d_%H-%M')
 save_folder.mkdir(parents=True, exist_ok=True)
 # %%
-torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 avg_valid_comm_cost = validate_dataloader(
     mpnn_ptr, tqdm(dev_dataloader, leave=False), distance_matrix_dict, beam_width) / len(dev_dataloader.dataset)
 loss_list_dev.append(avg_valid_comm_cost)
