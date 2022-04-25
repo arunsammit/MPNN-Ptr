@@ -67,7 +67,6 @@ else:
         distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
         # n = math.floor(math.sqrt(graph_size))
         # m = math.ceil(graph_size / n)
-        distance_matrix = generate_distance_matrix(n,m).to(device)
 if args.pretrained_model_path is None:
     feature_scale = data.edge_attr.max()
 else:
