@@ -6,27 +6,8 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 import math
 from gumbel import gumbel_like, gumbel_with_maximum
-from models.transformers import rearrange, TransformerAttention
+from models.transformers import rearrange, TransformerAttention, TransformerEncoder
 from utils.datagenerate import NocNumberingNew
-
-class TransformerEncoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim = 128, dim_feedforward = 512, n_layers = 3, p=0):
-        super(TransformerEncoder, self).__init__()
-        # try to subclass nn.TransformerEncoderLayer in order to remove the bias in input/output projection layers by setting bias = False in the constructor of MultiheadAttention Module
-        # do the above only if you suspect that it is causing any issues (but I don't think it will cause any issues)
-        # also if you exactly want to replicate the wouter kool's approach you can replace the self.norm1 and self.norm2 with nn.BatchNorm1d
-        encoder_layer = nn.TransformerEncoderLayer(d_model = hidden_dim, nhead = 8, dim_feedforward = dim_feedforward, dropout = p)
-        self.encoder = nn.TransformerEncoder(encoder_layer, n_layers)
-        self.proj = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            # nn.ReLU()
-        )
-    def forward(self, input, mask):
-        # print(mask)
-        input_proj = self.proj(input)
-        node_embeddings = self.encoder(input_proj, src_key_padding_mask = mask)
-        graph_embeddings = torch.mean(node_embeddings, dim = 0)
-        return node_embeddings, graph_embeddings
 
 class TransformerPointerNet2(nn.Module):
     "Transformer pointer net with modified decoding context and Graph Attention Network as the Encoder"
@@ -48,8 +29,8 @@ class TransformerPointerNet2(nn.Module):
         self.v2 = nn.Parameter(torch.empty(1, hidden_dim, device=device))
         # try to add non-linearity (nn.ReLU) & bias to improve the performance to improve the performance 
         self.proj1 = nn.Sequential( 
-            nn.Linear(3*hidden_dim, hidden_dim, bias = False),
-            # nn.ReLU()
+            nn.Linear(3*hidden_dim, hidden_dim),
+            nn.ReLU()
         )
         # if model is not able to learn check with  bias = False once
         self.mha = nn.MultiheadAttention(hidden_dim, num_heads, dropout=p)
