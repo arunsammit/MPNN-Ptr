@@ -13,6 +13,7 @@ import argparse
 import sys
 from joblib import Parallel, delayed
 import multiprocessing
+from graphdataset import get_transform
 #%%
 @njit
 def rand_permute2D(particle):
@@ -86,9 +87,12 @@ def repair(child):
 #%%
 class GA:
     def __init__(self, dataset_path, num_particles,\
-        max_iterations, prtl_init_method="random", model_path=None):
+        max_iterations, prtl_init_method="random", model_path=None, max_graph_size = 121):
         device = torch.device("cpu")
         single_graph_data = torch.load(dataset_path, map_location=device)
+        self.max_graph_size = max_graph_size
+        self.transform = get_transform(max_graph_size)
+        single_graph_data = self.transform(single_graph_data)
         graph_size = single_graph_data.num_nodes
         n = math.ceil(math.sqrt(graph_size))
         m = math.ceil(graph_size/n)
@@ -121,13 +125,16 @@ class GA:
         # TODO: generate half population from model and half randomly
         num_sampled_particles = int(num_particles * .2)
         num_random_particles = num_particles - num_sampled_particles
-        mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0.1, device=self.device, logit_clipping=True)
+        max_graph_size = self.max_graph_size
+        mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
+                   hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=self.device, logit_clipping=False)
         if self.model_path is None:
             raise ValueError('model_path is None')
         mpnn_ptr.load_state_dict(torch.load(self.model_path))
         mpnn_ptr.eval()
         with torch.no_grad():
             # generate initial population
+            mpnn_ptr.decoding_type = 'greedy'
             particle_sampled, _ = mpnn_ptr(self.data, 100000)
         particle_sampled = np.unique(particle_sampled.detach().numpy(),axis=0)
         particle_sampled_fit = self.comm_cost(particle_sampled)
@@ -246,7 +253,7 @@ if __name__ == "__main__":
     # print(f'execution time {end_time-st_time}secs')
     
     # measure time taken and best cost by running the algorithm 5 times
-    # best_cost = float('inf')
+    # best_cost = float('inf')s
     # best_time = float('inf')
     for i in range(5):
         print(f'iteration: {i} started \n')
@@ -254,9 +261,11 @@ if __name__ == "__main__":
         best_prtl, cost = ga.run()
         end_time = timer()
         time_taken = end_time - start_time
-        file1 = open("results/GA_geek4geek_"+args.dataset[5:-3]+'.csv','a')
-        file1.write(args.dataset[5:-3]+'_'+str(i)+","+str(cost)+","+str(time_taken)+'\n')    
+        data_name = args.dataset.split('/')[-1].split('.')[0]
+        file1 = open("results/GA_geek4geek_"+ data_name +'.csv','a')
+        file1.write(args.dataset[5:-3]+'_'+str(i)+","+str(cost) + ","+str(time_taken)+'\n')    
     # print(f'Time taken to run the algorithm: {best_time}')
     # print(f'Best cost: {best_cost}')
 # %%
+# python GA_original.py data_tgff/final_before_mtp/data_single_TGFF1_norm_16.pt --num_prtl 500 --max_iter 1000 --model models_data_multiple/small/models_data/model_init_pop_04-21_16-10.pt
 

@@ -11,6 +11,7 @@ from timeit import default_timer as timer
 import random
 import argparse
 import sys
+from graphdataset import get_transform
 #%%
 @njit
 def calc_swap_seq(curr_prtl, trns_to_prtl):
@@ -56,9 +57,12 @@ def evolve_particles(prtls, lcl_bst_prtl, gbest):
 #%%
 class Psmap:
     def __init__(self, dataset_path, num_particles,\
-        max_iterations, prtl_init_method="random", model_path=None):
+        max_iterations, prtl_init_method="random", model_path=None, max_graph_size=121):
         device = torch.device("cpu")
         single_graph_data = torch.load(dataset_path, map_location=device)
+        self.max_graph_size = max_graph_size
+        self.transform = get_transform(max_graph_size)
+        single_graph_data = self.transform(single_graph_data)
         graph_size = single_graph_data.num_nodes
         n = math.ceil(math.sqrt(graph_size))
         m = math.ceil(graph_size/n)
@@ -72,6 +76,7 @@ class Psmap:
         self.particle_size = graph_size
         self.prtl_init_method = prtl_init_method
         self.model_path = model_path
+        self.transform = get_transform()
         self.device = device
     def comm_cost(self, particle):
         return communication_cost_multiple_samples(self.data.edge_index,self.data.edge_attr,self.data.batch, self.distance_matrix, torch.from_numpy(particle), particle.shape[0]).detach().numpy()
@@ -84,14 +89,18 @@ class Psmap:
         # TODO: generate half population from model and half randomly
         num_sampled_particles = int(num_particles * .8)
         num_random_particles = num_particles - num_sampled_particles
-        mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0.1, device=self.device, logit_clipping=True, decoding_type='greedy',feature_scale=290)
+        max_graph_size = self.max_graph_size
+        mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
+            hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=self.device, logit_clipping=False)
+        mpnn_ptr.decoding_type = "greedy"
         if self.model_path is None:
             raise ValueError('model_path is None')
         mpnn_ptr.load_state_dict(torch.load(self.model_path, map_location=self.device))
         mpnn_ptr.eval()
         with torch.no_grad():
             # generate initial population
-            particle_sampled, _ = mpnn_ptr(self.data, 10000)
+            with torch.no_grad():
+                particle_sampled, _ = mpnn_ptr(self.data, 3000)
         particle_sampled = particle_sampled.detach().numpy()
         particle_sampled_fit = self.comm_cost(particle_sampled)
         indices = particle_sampled_fit.argpartition(num_sampled_particles)[:num_sampled_particles]
@@ -178,3 +187,4 @@ if __name__ == "__main__":
     # print(f'Time taken to run the algorithm: {best_time}')
     # print(f'Best cost: {best_cost}')
 # python3 psmap.py data_tgff/data_single_TGFF1_16.pt --num_prtl 1024 --max_iter 5000 --model models_data_final/model_16_01-10.pt
+# python psmap.py data_tgff/final_before_mtp/data_single_TGFF1_norm_16.pt --num_prtl 500 --max_iter 1000 --model models_data_multiple/small/models_data/model_init_pop_04-21_16-10.pt

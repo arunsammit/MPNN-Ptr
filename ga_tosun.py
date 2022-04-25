@@ -113,7 +113,7 @@ class GA:
         # TODO: generate half population from model and half randomly
         num_sampled_particles = int(num_particles * .8)
         num_random_particles = num_particles - num_sampled_particles
-        mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0.1, device=self.device, logit_clipping=True, decoding_type="greedy",feature_scale=290)
+        mpnn_ptr = MpnnPtr(input_dim=self.particle_size, embedding_dim=self.particle_size + 10, hidden_dim=self.particle_size + 20, K=3, n_layers=2, p_dropout=0, device=self.device, logit_clipping=True, decoding_type="greedy",feature_scale=290)
         if self.model_path is None:
             raise ValueError('model_path is None')
         mpnn_ptr.load_state_dict(torch.load(self.model_path))

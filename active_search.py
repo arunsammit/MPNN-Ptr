@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from train.validation import beam_search_data
 from timeit import default_timer as timer
 import argparse
+from graphdataset import get_transform
 #%%
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', help='path to dataset', type=str)
@@ -25,15 +26,19 @@ args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #%%
-def load_and_process_data(dataset_path, device = torch.device("cpu")):
+def load_and_process_data(dataset_path, device = torch.device("cpu"), transform=None):
     data = torch.load(dataset_path, map_location=device)
+    if transform is not None:
+        print(data.num_nodes)
+        data = transform(data)
     dataloader = DataLoader([data], batch_size=1)
     data = next(iter(dataloader))
     return data
 #%%
-def load_model(graph_size, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None, model='lstm', transformer_version='v2'):
+def load_model(graph_size=121, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None, model='lstm', transformer_version='v2'):
     if model == 'lstm':
-        mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 8, hidden_dim=graph_size + 16, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False, feature_scale=feature_scale)
+        mpnn_ptr =MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 7,
+                   hidden_dim=graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
     elif model == 'transformer':
         mpnn_ptr = MpnnTransformer(input_dim=graph_size, embedding_dim=graph_size + 8, hidden_dim=graph_size + 16, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=True, version=transformer_version)
     if pretrained_model_path is not None:
@@ -42,8 +47,11 @@ def load_model(graph_size, device = torch.device('cpu'), feature_scale = 1, pret
     return mpnn_ptr
 
 #%%
+max_graph_size = 121
 num_samples = args.num_samples
-data = load_and_process_data(args.dataset, device)
+transform = get_transform(max_graph_size, device)
+data = load_and_process_data(args.dataset, device, transform)
+print(data)
 graph_size = data.num_nodes
 if args.three_D:
     n = math.ceil(math.sqrt(graph_size/2))
@@ -55,14 +63,16 @@ else:
         n, m = get_mesh_dimensions_newer(graph_size)
         distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
     else:
-        # n, m = get_mesh_dimensions_newer(graph_size)
-        # distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
-        n = math.floor(math.sqrt(graph_size))
-        m = math.ceil(graph_size / n)
+        n, m = get_mesh_dimensions_newer(graph_size)
+        distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
+        # n = math.floor(math.sqrt(graph_size))
+        # m = math.ceil(graph_size / n)
         distance_matrix = generate_distance_matrix(n,m).to(device)
 if args.pretrained_model_path is None:
     feature_scale = data.edge_attr.max()
-mpnn_ptr = load_model(graph_size, device, feature_scale=feature_scale, pretrained_model_path=args.pretrained_model_path, model=args.model, transformer_version=args.transformer_version)
+else:
+    feature_scale = 1
+mpnn_ptr = load_model(max_graph_size, device, feature_scale=feature_scale, pretrained_model_path=args.pretrained_model_path, model=args.model, transformer_version=args.transformer_version)
 mpnn_ptr.train()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=args.lr)
 # lr_scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=100, gamma=0.93)

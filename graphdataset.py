@@ -9,9 +9,9 @@ import os
 import re
 from torch.utils.data.sampler import Sampler, BatchSampler, SubsetRandomSampler
 #%%
-def get_transform(max_num_nodes=121):
+def get_transform(max_num_nodes=121, device=torch.device('cpu')):
     def transform(data:Data)->Data:
-        x = torch.zeros(data.num_nodes, max_num_nodes)
+        x = torch.zeros(data.num_nodes, max_num_nodes, device=device)
         x[data.edge_index[0], data.edge_index[1]] = data.edge_attr.squeeze(-1)
         data_new = Data(x=x, edge_index=data.edge_index, edge_attr=data.edge_attr)
         return data_new

@@ -12,6 +12,7 @@ from train.validation import beam_search_data
 from timeit import default_timer as timer
 import argparse
 from gumbel import gumbel_log_survival
+from active_search import load_and_process_data, load_model
 #%%
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', help='path to dataset', type=str)
@@ -24,21 +25,8 @@ args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #%%
-def load_and_process_data(dataset_path, device = torch.device("cpu")):
-    data = torch.load(dataset_path, map_location=device)
-    dataloader = DataLoader([data], batch_size=1)
-    data = next(iter(dataloader))
-    return data
-#%%
-def load_model(graph_size, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None):
-    mpnn_ptr = MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 10, hidden_dim=graph_size + 20, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False, feature_scale=feature_scale)
-    if pretrained_model_path is not None:
-        mpnn_ptr.load_state_dict(torch.load(pretrained_model_path, map_location=device))
-    mpnn_ptr.to(device)
-    return mpnn_ptr
-
-#%%
 num_samples = args.num_samples
+max_graph_size = 121
 data = load_and_process_data(args.dataset, device)
 graph_size = data.num_nodes
 if args.three_D:
@@ -50,7 +38,7 @@ else:
     n = math.floor(math.sqrt(graph_size))
     m = math.ceil(graph_size / n)
     distance_matrix = generate_distance_matrix(n,m).to(device)
-mpnn_ptr = load_model(graph_size, device, feature_scale=1, pretrained_model_path=args.pretrained_model_path)
+mpnn_ptr = load_model(max_graph_size, device, feature_scale=1, pretrained_model_path=args.pretrained_model_path)
 mpnn_ptr.train()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=args.lr)
 # lr_scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=100, gamma=0.93)
