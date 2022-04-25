@@ -21,15 +21,15 @@ max_graph_size = 121
 batch_size_train = 32
 batch_size_dev = 128
 # change the number to 0 to use a random initialize model parameters
-saved_model_path = 'models_data_multiple/small/models_data/model_pretrain_04-24_17-37.pt'
-# saved_model_path = None
+# saved_model_path = 'models_data_multiple/small/models_data/model_pretrain_04-24_17-37.pt'
+saved_model_path = None
 lr = 0.0001
 # lr_decay_gamma = .96
 num_epochs = 40 #27
 num_samples = 8
 beam_width = 8
 training_algorithm = 'pretrain'  # 'init_pop' or 'pretrain'
-model = "lstm" # 'lstm' or 'transformer'
+model = "transformer" # 'lstm' or 'transformer'
 transformer_version = "v2"
 root_folder = Path('./models_data_multiple') # to save the trained model, the logs and the validation results
 save_folder = root_folder / "small"  # ('models_data_final', 'full', 'small')
@@ -53,7 +53,7 @@ if model == "lstm":
     mpnn_ptr = MpnnPtr(input_dim=max_graph_size, embedding_dim=max_graph_size + 7,
                    hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
 elif model == "transformer":
-    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=True, version=transformer_version)
+    mpnn_ptr = MpnnTransformer(input_dim=max_graph_size, embedding_dim=max_graph_size + 7, hidden_dim=max_graph_size + 7, K=3, n_layers=3, p_dropout=0, device=device, logit_clipping=True, version=transformer_version, use_mpnn=False)
 mpnn_ptr.to(device)
 # %% load model if saved
 if saved_model_path:

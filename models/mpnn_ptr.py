@@ -31,10 +31,17 @@ class MpnnPtr(nn.Module):
         # pass embeddings and mask through PointerNet to get pointer
         return self.ptr_net(batched_embeddings.permute(1, 0, 2), mask, num_samples)
 class MpnnTransformer(nn.Module):
-    def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True, decoding_type='sampling', feature_scale=1.0, version='v1'):
+    def __init__(self, input_dim, embedding_dim, hidden_dim, K, n_layers, p_dropout, device, logit_clipping=True, decoding_type='sampling', feature_scale=1.0, version='v1', use_mpnn=True):
         # K is the number of rounds of message passing
         super(MpnnTransformer, self).__init__()
-        self.mpnn = Mpnn(input_dim, embedding_dim, K)
+        self.use_mpnn = use_mpnn
+        if use_mpnn:
+            self.mpnn = Mpnn(input_dim, embedding_dim, K)
+        else:
+            self.lin1 = nn.Sequential(
+                nn.Linear(input_dim, embedding_dim), 
+                nn.ReLU()
+            )
         self.device = device
         self.logit_clipping = logit_clipping
         self.feature_scale = feature_scale
@@ -51,7 +58,10 @@ class MpnnTransformer(nn.Module):
     def forward(self, data, num_samples=1):
         # data is batch of graphs
         # pass data through Mpnn to get embeddings
-        embeddings = self.mpnn(data.x / self.feature_scale, data.edge_index, data.edge_attr / self.feature_scale, data.batch)
+        if self.use_mpnn:
+            embeddings = self.mpnn(data.x / self.feature_scale, data.edge_index, data.edge_attr / self.feature_scale, data.batch)
+        else:
+            embeddings = self.lin1(data.x / self.feature_scale)
         batched_embeddings, mask = torch_geometric.utils.to_dense_batch(embeddings, data.batch)
         # batched_embeddings shape: (batch_size, max_num_nodes, embedding_dim)
         # pass embeddings and mask through PointerNet to get pointer

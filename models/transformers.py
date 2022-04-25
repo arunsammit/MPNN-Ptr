@@ -154,6 +154,7 @@ class TransformerPointerNet(nn.Module):
                 node_embeddings = node_embeddings.repeat_interleave(num_samples, dim=1)
                 # filling mask with -1 is not required
                 adjacent_decoded_embeddings = adjacent_decoded_embeddings.repeat_interleave(num_samples, dim=0)
+                last_decoded_embeddings = last_decoded_embeddings.repeat_interleave(num_samples, dim=0)
             else:
                 if self.decoding_type != 'sampling':
                     if self.decoding_type == 'sampling-w/o-replacement':

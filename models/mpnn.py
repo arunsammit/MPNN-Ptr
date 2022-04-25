@@ -42,6 +42,7 @@ class Mpnn(MessagePassing):
     def __init__(self, input_node_dim, n_features, K):
         # input_node_dim: dimension of input node features.
         # n_features: dimension of the output embeddings
+        print(f"using mpnn with {input_node_dim} input_node_dim and {n_features} n_features")
         super().__init__(aggr='add')
         self.K = K
         self.node_init_embedding_layer = nn.Sequential(
