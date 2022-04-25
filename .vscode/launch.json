@@ -96,11 +96,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/active_search_2.py",
             "args": [
-                "data_tgff/single/traffic_32.pt", 
+                "data_tgff/single/traffic_72.pt", 
                 "--lr",
                 "0.001",
                 "--max_iter",
-                "5000", 
+                "1", 
                 "--num_samples",
                 "1024"
             ],

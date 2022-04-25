@@ -1,5 +1,5 @@
 #%%
-from utils.datagenerate import generate_distance_matrix, generate_distance_matrix_3D
+from utils.datagenerate import generate_distance_matrix, generate_distance_matrix_3D,  get_mesh_dimensions_newer
 import math
 import torch
 import torch.nn.functional as F
@@ -12,7 +12,7 @@ from train.validation import beam_search_data
 from timeit import default_timer as timer
 import argparse
 from gumbel import gumbel_log_survival
-from active_search import load_and_process_data, load_model
+from graphdataset import get_transform
 #%%
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', help='path to dataset', type=str)
@@ -25,9 +25,29 @@ args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #%%
+def load_and_process_data(dataset_path, device = torch.device("cpu"), transform=None):
+    data = torch.load(dataset_path, map_location=device)
+    if transform is not None:
+        print(data.num_nodes)
+        data = transform(data)
+    dataloader = DataLoader([data], batch_size=1)
+    data = next(iter(dataloader))
+    return data
+#%%
+def load_model(graph_size=121, device = torch.device('cpu'), feature_scale = 1, pretrained_model_path = None, model='lstm', transformer_version='v2'):
+    if model == 'lstm':
+        mpnn_ptr =MpnnPtr(input_dim=graph_size, embedding_dim=graph_size + 7,
+                   hidden_dim=graph_size + 7, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=False)
+    elif model == 'transformer':
+        mpnn_ptr = MpnnTransformer(input_dim=graph_size, embedding_dim=graph_size + 8, hidden_dim=graph_size + 16, K=3, n_layers=1, p_dropout=0, device=device, logit_clipping=True, version=transformer_version)
+    if pretrained_model_path is not None:
+        mpnn_ptr.load_state_dict(torch.load(pretrained_model_path, map_location=device))
+    mpnn_ptr.to(device)
+    return mpnn_ptr
 num_samples = args.num_samples
 max_graph_size = 121
-data = load_and_process_data(args.dataset, device)
+transform = get_transform(max_graph_size, device)
+data = load_and_process_data(args.dataset, device, transform)
 graph_size = data.num_nodes
 if args.three_D:
     n = math.ceil(math.sqrt(graph_size/2))
@@ -35,9 +55,8 @@ if args.three_D:
     l = 2
     distance_matrix = generate_distance_matrix_3D(n, m, l).to(device)
 else:
-    n = math.floor(math.sqrt(graph_size))
-    m = math.ceil(graph_size / n)
-    distance_matrix = generate_distance_matrix(n,m).to(device)
+    n, m = get_mesh_dimensions_newer(graph_size)
+    distance_matrix = generate_distance_matrix(n, m, numbering="new").to(device)
 mpnn_ptr = load_model(max_graph_size, device, feature_scale=1, pretrained_model_path=args.pretrained_model_path)
 mpnn_ptr.train()
 optim = torch.optim.Adam(mpnn_ptr.parameters(), lr=args.lr)
@@ -50,6 +69,8 @@ count_not_decrease = 0
 # start measuring time
 start = timer()
 for epoch in range(num_epochs):
+    if epoch == num_epochs - 1:
+        pass
     mpnn_ptr.train()
     mpnn_ptr.decoding_type = 'sampling-w/o-replacement'
     mappings, log_probs, g_log_probs = mpnn_ptr(data, num_samples + 1)
@@ -120,3 +141,5 @@ fig.savefig(f'./plots/loss_single_uniform_{graph_size}_3.png')  # Save the figur
 # python3 active_search.py data_tgff/single/traffic_72.pt --lr 0.0002 --max_iter 10000 --num_samples 1024
 # command to run with pretrained model and 3D:
 # python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.001 --max_iter 5000 --num_samples 1024 --three_D
+## the final command to run active search 2 with pretrained model
+# python3 active_search_2.py data_tgff/single/traffic_72.pt --lr 0.002 --pretrained_model_path models_data_multiple/small/models_data/model_pretrain_04-24_17-37.pt --max_iter 5000

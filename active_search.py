@@ -145,3 +145,6 @@ fig.savefig(f'./plots/loss_single_uniform_{graph_size}_3.png')  # Save the figur
 # python3 active_search.py data_tgff/single/traffic_72.pt --lr 0.001 --max_iter 10000 --num_samples 1024 --model transformer
 # command to run with pretrained model and 3D:
 # python3 active_search.py data_tgff/single/traffic_32.pt --lr 0.001 --max_iter 5000 --num_samples 1024 --three_D
+
+## The final command for running with pretrained model
+# python3 active_search.py data_tgff/single/traffic_72.pt --lr 0.002 --pretrained_model_path models_data_multiple/small/models_data/model_pretrain_04-24_17-37.pt --max_iter 5000
